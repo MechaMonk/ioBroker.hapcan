@@ -52,6 +52,103 @@ class Hapcan extends utils.Adapter {
      * @param {number} group
      * @param {number[]} data
      */
+    create302frame(flags, node, group, data) {
+        if (data[0] != 0xFF || data[1] != 0xFF) {
+            this.log.error('Invalid 302 frame. Expected D0=FF & D1=FF.');
+            return;
+        }
+        const _node = this.hex2string2(node);
+        const _group = this.hex2string2(group);
+        const deviceId = _node + '_' + _group;
+        const deviceName = 'Node ' + _node + ', group ' + _group;
+
+        // output channel
+        const CHANNEL = data[2];
+        // actual status of outputs:
+        // 0x00 relay off
+        // 0xFF relay on
+        const STATUS = data[3];
+        // instruction that is waiting for execution, or 0xFF if none instruction
+        const INSTR1 = data[5];
+        // second byte of instruction that is waiting for execution, or 0xFF
+        const INSTR2 = data[6];
+        // delay value of waiting instruction, or 0x00 if none waiting
+        const TIMER = data[7];
+
+        const channel = this.hex2string(CHANNEL);
+        const closed = (STATUS == 0xFF);
+
+        const relayClosedId = `${deviceId}.relays.${channel}_closed`;
+
+        this.createRelays(deviceId, deviceName, 6);
+        this.setState(relayClosedId, { val: closed, ack: true });
+    }
+
+    /**
+     * @param {number} flags
+     * @param {number} node
+     * @param {number} group
+     * @param {number[]} data
+     */
+    create301frame(flags, node, group, data) {
+        if (data[0] != 0xFF || data[1] != 0xFF) {
+            this.log.error('Invalid 301 frame. Expected D0=FF & D1=FF.');
+            return;
+        }
+        const _node = this.hex2string2(node);
+        const _group = this.hex2string2(group);
+        const deviceId = _node + '_' + _group;
+        const deviceName = 'Node ' + _node + ', group ' + _group;
+
+        // input channel: 0x01 (button 1) … 0x0E (button 14)
+        const CHANNEL = data[2];
+        // actual input status:
+        // 0x00 open
+        // 0x01 disabled
+        // 0xFF closed
+        // 0xFE closed and held for 400ms
+        // 0xFD closed and held for 4s
+        // 0xFC closed and open within 400ms
+        // 0xFB closed and open between 400ms and 4s
+        // 0xFA closed and open after 4s
+        const BUTTON = data[3];
+        // actual LED status:
+        // 0x00 off
+        // 0xFF on
+        // 0x01 disabled
+        const LED = data[4];
+
+        const channel = this.hex2string(CHANNEL);
+        const enabled = (BUTTON != 0x01);
+        const closed = (BUTTON == 0xFF || BUTTON == 0xFE || BUTTON == 0xFD);
+        const status = this.hex2string2(BUTTON); // TODO: enum
+
+        const buttonEnabledId = `${deviceId}.buttons.${channel}_enabled`;
+        const buttonClosedId = `${deviceId}.buttons.${channel}_closed`;
+        const buttonStatusId = `${deviceId}.buttons.${channel}_status`;
+
+        this.createButtons(deviceId, deviceName, 14);
+        this.setState(buttonEnabledId, { val: enabled, ack: true });
+        this.setState(buttonClosedId, { val: closed, ack: true });
+        this.setState(buttonStatusId, { val: status, ack: true });
+
+        const ledEnabled = (LED != 0x01);
+        const ledOn = (LED == 0xFF);
+
+        const ledEnabledId = `${deviceId}.leds.${channel}_enabled`;
+        const ledOnId = `${deviceId}.leds.${channel}_on`;
+
+        this.createLeds(deviceId, deviceName, 14);
+        this.setState(ledEnabledId, { val: ledEnabled, ack: true });
+        this.setState(ledOnId, { val: ledOn, ack: true });
+    }
+
+    /**
+     * @param {number} flags
+     * @param {number} node
+     * @param {number} group
+     * @param {number[]} data
+     */
     create304frame(flags, node, group, data) {
         if (data[0] != 0xFF || data[1] != 0xFF) {
             this.log.error('Invalid 304 frame. Expected D0=FF & D1=FF.');
@@ -59,8 +156,8 @@ class Hapcan extends utils.Adapter {
         }
         // const thermometerChannelId = 'thermometer';
         // const thermostatChannelId = 'thermostat';
-        const _node = this.hex2string(node);
-        const _group = this.hex2string(group);
+        const _node = this.hex2string2(node);
+        const _group = this.hex2string2(group);
         const deviceId = _node + '_' + _group;
         const deviceName = 'Node ' + _node + ', group ' + _group;
 
@@ -132,7 +229,7 @@ class Hapcan extends utils.Adapter {
             this.setState(errorCodeId, { val: errorCode, ack: true });
             this.setState(errorMessageId, { val: errorMessage, ack: true });
         } else {
-            const d2Value = this.hex2string(data[2]);
+            const d2Value = this.hex2string2(data[2]);
             this.log.warn('Unknown 304 frame sub-type. D2=' + d2Value + '.');
         }
 
@@ -148,8 +245,16 @@ class Hapcan extends utils.Adapter {
     create(frameType, flags, node, group, data) {
 
         // https://hapcan.com/devices/universal/univ_3/univ_3-1-3-x/univ_3-1-3-1/univ_3-1-3-1a.pdf
+
         if (frameType == 0x304) {
+            // Thermometer, thermostat
             this.create304frame(flags, node, group, data);
+        } else if (frameType == 0x301) {
+            // Button
+            this.create301frame(flags, node, group, data);
+        } else if (frameType == 0x302) {
+            // Relay
+            this.create302frame(flags, node, group, data);
         } else if (frameType == 0x109) {
             // Status request frame
             // TODO: missing implementation of Status request frame
@@ -163,7 +268,7 @@ class Hapcan extends utils.Adapter {
             // TODO: missing implementation of Health check frame
             this.log.warn('Health check frame not implemented');
         } else {
-            const frameTypeValue = this.hex2string(frameType);
+            const frameTypeValue = this.hex2string2(frameType);
             this.log.warn('Frame type ' + frameTypeValue + ' not implemented.');
         }
     }
@@ -417,7 +522,7 @@ class Hapcan extends utils.Adapter {
             this.createState(deviceId, channelId, enabledId, {
                 name: 'Enabled',
                 type: 'boolean',
-                role: 'switch',
+                role: 'indicator.plugged',
                 read: true,
                 write: false,
             });
@@ -425,10 +530,161 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
+ * @param {string} deviceId
+ * @param {string} deviceName
+ * @param {number} buttonsCount
+ */
+    async createButtons(deviceId, deviceName, buttonsCount) {
+        const channelId = 'buttons';
+        const fullDeviceId = this.namespace + '.' + deviceId;
+        const fullChannelId = fullDeviceId + '.' + channelId;
+
+        let found = false;
+
+        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
+        if (found) {
+            // this.log.warn('Device ' + fullDeviceId + ' found');
+            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
+        } else {
+            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName });
+            this.log.warn('Device ' + fullDeviceId + ' created.');
+        }
+        if (!found) {
+            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId);
+            this.log.warn('Channel ' + fullChannelId + ' created.');
+            for (let i = 1; i <= buttonsCount; i++) {
+                const iValue = this.hex2string(i);
+                const statusId = `${iValue}_status`;
+                const closedId = `${iValue}_closed`;
+                const enabledId = `${iValue}_enabled`;
+
+                this.createState(deviceId, channelId, statusId, {
+                    name: 'Status',
+                    type: 'string',
+                    role: 'indicator.state',
+                    read: true,
+                    write: false,
+                });
+                this.createState(deviceId, channelId, closedId, {
+                    name: 'Closed',
+                    type: 'boolean',
+                    role: 'button',
+                    read: true,
+                    write: false,
+                });
+                this.createState(deviceId, channelId, enabledId, {
+                    name: 'Enabled',
+                    type: 'boolean',
+                    role: 'indicator.plugged',
+                    read: true,
+                    write: false,
+                });
+            }
+        }
+    }
+
+    /**
+* @param {string} deviceId
+* @param {string} deviceName
+* @param {number} ledsCount
+*/
+    async createLeds(deviceId, deviceName, ledsCount) {
+        const channelId = 'leds';
+        const fullDeviceId = this.namespace + '.' + deviceId;
+        const fullChannelId = fullDeviceId + '.' + channelId;
+
+        let found = false;
+
+        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
+        if (found) {
+            // this.log.warn('Device ' + fullDeviceId + ' found');
+            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
+        } else {
+            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName });
+            this.log.warn('Device ' + fullDeviceId + ' created.');
+        }
+        if (!found) {
+            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId);
+            this.log.warn('Channel ' + fullChannelId + ' created.');
+            for (let i = 1; i <= ledsCount; i++) {
+                const iValue = this.hex2string(i);
+                const onId = `${iValue}_on`;
+                const enabledId = `${iValue}_enabled`;
+
+                this.createState(deviceId, channelId, onId, {
+                    name: 'On',
+                    type: 'boolean',
+                    role: 'switch',
+                    read: true,
+                    write: false,
+                });
+                this.createState(deviceId, channelId, enabledId, {
+                    name: 'Enabled',
+                    type: 'boolean',
+                    role: 'indicator.plugged',
+                    read: true,
+                    write: false,
+                });
+            }
+        }
+    }
+
+    /**
+* @param {string} deviceId
+* @param {string} deviceName
+* @param {number} relaysCount
+*/
+    async createRelays(deviceId, deviceName, relaysCount) {
+        const channelId = 'relays';
+        const fullDeviceId = this.namespace + '.' + deviceId;
+        const fullChannelId = fullDeviceId + '.' + channelId;
+
+        let found = false;
+
+        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
+        if (found) {
+            // this.log.warn('Device ' + fullDeviceId + ' found');
+            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
+        } else {
+            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName });
+            this.log.warn('Device ' + fullDeviceId + ' created.');
+        }
+        if (!found) {
+            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId);
+            this.log.warn('Channel ' + fullChannelId + ' created.');
+            for (let i = 1; i <= relaysCount; i++) {
+                const iValue = this.hex2string(i);
+                const closedId = `${iValue}_closed`;
+
+                this.createState(deviceId, channelId, closedId, {
+                    name: 'Closed',
+                    type: 'boolean',
+                    role: 'switch',
+                    read: true,
+                    write: false,
+                });
+            }
+        }
+    }
+
+    /**
+    * @param {number} hexValue
+    */
+    hex2string2(hexValue) {
+        return this.hex2string(hexValue).padStart(2, '0');
+    }
+
+    /**
     * @param {number} hexValue
     */
     hex2string(hexValue) {
-        return hexValue.toString(16).toUpperCase().padStart(2, '0');
+        return hexValue.toString(16).toUpperCase();
     }
 }
 
