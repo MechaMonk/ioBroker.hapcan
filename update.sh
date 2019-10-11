@@ -4,8 +4,8 @@ iobrokerHapcanDir=/opt/iobroker/node_modules/iobroker.hapcan
 cp io-package.json ${iobrokerHapcanDir}
 cp package.json ${iobrokerHapcanDir}
 cp main.js ${iobrokerHapcanDir}
-cp lib/creator.js ${iobrokerHapcanDir}/lib
 cp lib/decoder.js ${iobrokerHapcanDir}/lib
+cp lib/encoder.js ${iobrokerHapcanDir}/lib
 cp lib/listener.js ${iobrokerHapcanDir}/lib
 cp admin/hapcan.png ${iobrokerHapcanDir}/admin
 cp admin/index_m.html ${iobrokerHapcanDir}/admin

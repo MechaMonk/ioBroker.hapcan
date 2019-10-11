@@ -2,7 +2,7 @@
 const utils = require('@iobroker/adapter-core');
 const Listener = require('./lib/listener.js');
 const Decoder = require('./lib/decoder.js');
-//const Creator = require('./lib/creator.js');
+const Encoder = require('./lib/encoder.js');
 
 class Hapcan extends utils.Adapter {
     /**
@@ -16,10 +16,11 @@ class Hapcan extends utils.Adapter {
 
         this.listener = new Listener();
         this.decoder = new Decoder();
-        //this.creator = new Creator();
+        this.encoder = new Encoder();
 
         this.listener.on('chunk', (chunk) => this.decoder.put(chunk));
-        this.decoder.on('frame', (frameType, flags, node, group, data) => this.create(frameType, flags, node, group, data));
+        this.decoder.on('frame', (frameType, flags, node, group, data) => this.readFrame(frameType, flags, node, group, data));
+        this.encoder.on('frame', (data) => this.listener.write(data));
 
         this.listener.on('logInfo', (msg) => this.log.info(msg));
         this.listener.on('logWarn', (msg) => this.log.warn(msg));
@@ -27,9 +28,9 @@ class Hapcan extends utils.Adapter {
         this.decoder.on('logInfo', (msg) => this.log.info(msg));
         this.decoder.on('logWarn', (msg) => this.log.warn(msg));
         this.decoder.on('logError', (msg) => this.log.error(msg));
-        // this.creator.on('logInfo', (msg) => this.log.info(msg));
-        // this.creator.on('logWarn', (msg) => this.log.warn(msg));
-        // this.creator.on('logError', (msg) => this.log.error(msg));
+        this.encoder.on('logInfo', (msg) => this.log.info(msg));
+        this.encoder.on('logWarn', (msg) => this.log.warn(msg));
+        this.encoder.on('logError', (msg) => this.log.error(msg));
 
         this.on('ready', this.onReady.bind(this));
         this.on('objectChange', this.onObjectChange.bind(this));
@@ -52,7 +53,7 @@ class Hapcan extends utils.Adapter {
      * @param {number} group
      * @param {number[]} data
      */
-    create302frame(flags, node, group, data) {
+    async read302frame(flags, node, group, data) {
         if (data[0] != 0xFF || data[1] != 0xFF) {
             this.log.error('Invalid 302 frame. Expected D0=FF & D1=FF.');
             return;
@@ -69,19 +70,19 @@ class Hapcan extends utils.Adapter {
         // 0xFF relay on
         const STATUS = data[3];
         // instruction that is waiting for execution, or 0xFF if none instruction
-        const INSTR1 = data[5];
+        // const INSTR1 = data[5];
         // second byte of instruction that is waiting for execution, or 0xFF
-        const INSTR2 = data[6];
+        // const INSTR2 = data[6];
         // delay value of waiting instruction, or 0x00 if none waiting
-        const TIMER = data[7];
+        // const TIMER = data[7];
 
         const channel = this.hex2string(CHANNEL);
         const closed = (STATUS == 0xFF);
 
         const relayClosedId = `${deviceId}.relays.${channel}_closed`;
 
-        this.createRelays(deviceId, deviceName, 6);
-        this.setState(relayClosedId, { val: closed, ack: true });
+        await this.createRelays(node, group, deviceId, deviceName, 6);
+        await this.setStateAsync(relayClosedId, { val: closed, ack: true });
     }
 
     /**
@@ -90,7 +91,7 @@ class Hapcan extends utils.Adapter {
      * @param {number} group
      * @param {number[]} data
      */
-    create301frame(flags, node, group, data) {
+    async read301frame(flags, node, group, data) {
         if (data[0] != 0xFF || data[1] != 0xFF) {
             this.log.error('Invalid 301 frame. Expected D0=FF & D1=FF.');
             return;
@@ -127,10 +128,10 @@ class Hapcan extends utils.Adapter {
         const buttonClosedId = `${deviceId}.buttons.${channel}_closed`;
         const buttonStatusId = `${deviceId}.buttons.${channel}_status`;
 
-        this.createButtons(deviceId, deviceName, 14);
-        this.setState(buttonEnabledId, { val: enabled, ack: true });
-        this.setState(buttonClosedId, { val: closed, ack: true });
-        this.setState(buttonStatusId, { val: status, ack: true });
+        await this.createButtons(node, group, deviceId, deviceName, 14);
+        await this.setStateAsync(buttonEnabledId, { val: enabled, ack: true });
+        await this.setStateAsync(buttonClosedId, { val: closed, ack: true });
+        await this.setStateAsync(buttonStatusId, { val: status, ack: true });
 
         const ledEnabled = (LED != 0x01);
         const ledOn = (LED == 0xFF);
@@ -138,9 +139,9 @@ class Hapcan extends utils.Adapter {
         const ledEnabledId = `${deviceId}.leds.${channel}_enabled`;
         const ledOnId = `${deviceId}.leds.${channel}_on`;
 
-        this.createLeds(deviceId, deviceName, 14);
-        this.setState(ledEnabledId, { val: ledEnabled, ack: true });
-        this.setState(ledOnId, { val: ledOn, ack: true });
+        await this.createLeds(node, group, deviceId, deviceName, 14);
+        await this.setStateAsync(ledEnabledId, { val: ledEnabled, ack: true });
+        await this.setStateAsync(ledOnId, { val: ledOn, ack: true });
     }
 
     /**
@@ -149,7 +150,7 @@ class Hapcan extends utils.Adapter {
      * @param {number} group
      * @param {number[]} data
      */
-    create304frame(flags, node, group, data) {
+    async read304frame(flags, node, group, data) {
         if (data[0] != 0xFF || data[1] != 0xFF) {
             this.log.error('Invalid 304 frame. Expected D0=FF & D1=FF.');
             return;
@@ -183,11 +184,11 @@ class Hapcan extends utils.Adapter {
             const setpointId = deviceId + '.thermostat.setpoint';
             const hysteresisId = deviceId + '.thermostat.hysteresis';
 
-            this.createThermometer(deviceId, deviceName);
-            this.createThermostat(deviceId, deviceName);
-            this.setState(temperatureId, { val: temperature, ack: true });
-            this.setState(setpointId, { val: setpoint, ack: true });
-            this.setState(hysteresisId, { val: hysteresis, ack: true });
+            await this.createThermometer(node, group, deviceId, deviceName);
+            await this.createThermostat(node, group, deviceId, deviceName);
+            await this.setStateAsync(temperatureId, { val: temperature, ack: true });
+            await this.setStateAsync(setpointId, { val: setpoint, ack: true });
+            await this.setStateAsync(hysteresisId, { val: hysteresis, ack: true });
         } else if (data[2] == 0x12) {
             // Thermostat frame
 
@@ -202,9 +203,9 @@ class Hapcan extends utils.Adapter {
             const positionId = deviceId + '.thermostat.position';
             const enabledId = deviceId + '.thermostat.enabled';
 
-            this.createThermostat(deviceId, deviceName);
-            this.setState(positionId, { val: position, ack: true });
-            this.setState(enabledId, { val: enabled, ack: true });
+            await this.createThermostat(node, group, deviceId, deviceName);
+            await this.setStateAsync(positionId, { val: position, ack: true });
+            await this.setStateAsync(enabledId, { val: enabled, ack: true });
         } else if (data[2] == 0x13) {
             // Controller frame
             // TODO: missing implementation of Controller frame
@@ -225,14 +226,13 @@ class Hapcan extends utils.Adapter {
             const errorCodeId = deviceId + '.thermometer.error_code';
             const errorMessageId = deviceId + '.thermometer.error_message';
 
-            this.createThermometer(deviceId, deviceName);
-            this.setState(errorCodeId, { val: errorCode, ack: true });
-            this.setState(errorMessageId, { val: errorMessage, ack: true });
+            await this.createThermometer(node, group, deviceId, deviceName);
+            await this.setStateAsync(errorCodeId, { val: errorCode, ack: true });
+            await this.setStateAsync(errorMessageId, { val: errorMessage, ack: true });
         } else {
             const d2Value = this.hex2string2(data[2]);
             this.log.warn('Unknown 304 frame sub-type. D2=' + d2Value + '.');
         }
-
     }
 
     /**
@@ -242,19 +242,17 @@ class Hapcan extends utils.Adapter {
      * @param {number} group
      * @param {number[]} data
      */
-    create(frameType, flags, node, group, data) {
-
-        // https://hapcan.com/devices/universal/univ_3/univ_3-1-3-x/univ_3-1-3-1/univ_3-1-3-1a.pdf
+    async readFrame(frameType, flags, node, group, data) {
 
         if (frameType == 0x304) {
             // Thermometer, thermostat
-            this.create304frame(flags, node, group, data);
+            this.read304frame(flags, node, group, data);
         } else if (frameType == 0x301) {
             // Button
-            this.create301frame(flags, node, group, data);
+            this.read301frame(flags, node, group, data);
         } else if (frameType == 0x302) {
             // Relay
-            this.create302frame(flags, node, group, data);
+            this.read302frame(flags, node, group, data);
         } else if (frameType == 0x109) {
             // Status request frame
             // TODO: missing implementation of Status request frame
@@ -271,6 +269,60 @@ class Hapcan extends utils.Adapter {
             const frameTypeValue = this.hex2string2(frameType);
             this.log.warn('Frame type ' + frameTypeValue + ' not implemented.');
         }
+    }
+
+    /**
+           * @param {string} id
+           * @param {ioBroker.State | null | undefined} state
+           */
+    async updateState(id, state) {
+        await this.getObjectAsync(id).then(async stateObject => {
+            if (stateObject === undefined || stateObject == null) {
+                this.log.warn(`Object ${id} NOT found. State change ignored.`);
+                return;
+            } else if (stateObject.type !== 'state') {
+                this.log.warn(`Object ${id} is NOT the state object. State change ignored.`);
+                return;
+            }
+            if (!stateObject.common.write) {
+                this.log.warn(`State object ${id} is NOT writable. State change ignored.`);
+                return;
+            }
+            if (state === undefined || state == null) {
+                this.log.warn(`State of ${id} is empty. State change ignored.`);
+                return;
+            }
+            // this.log.info(`State object ${id} found`);
+            // this.log.info(`typeof result = ${typeof result}`);
+
+            // ex: 'hapcan.0.01_03.leds.1_on'
+            // Delete state & channel id
+            const channelId = id.slice(0, id.lastIndexOf('.'));
+            // this.log.info(channelId);
+            await this.getObjectAsync(channelId).then(async channelObject => {
+                if (channelObject === undefined || channelObject == null) {
+                    this.log.warn(`Channel ${id} NOT found. State change ignored.`);
+                    return;
+                } else if (channelObject.type !== 'channel') {
+                    this.log.warn(`Object ${id} is NOT the channel object. State change ignored.`);
+                    return;
+                }
+
+                const deviceId = channelId.slice(0, channelId.lastIndexOf('.'));
+                // this.log.info(deviceId);
+                await this.getObjectAsync(deviceId).then(async deviceObject => {
+                    if (deviceObject === undefined || deviceObject == null) {
+                        this.log.warn(`Device ${id} NOT found. State change ignored.`);
+                        return;
+                    } else if (deviceObject.type !== 'device') {
+                        this.log.warn(`Object ${id} is NOT the device object. State change ignored.`);
+                        return;
+                    }
+
+                    await this.encoder.writeState(deviceObject, channelObject, stateObject, state);
+                });
+            });
+        });
     }
 
     /**
@@ -392,6 +444,10 @@ class Hapcan extends utils.Adapter {
     onStateChange(id, state) {
         if (state) {
             // The state was changed
+            if (!state.ack) {
+                this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+                this.updateState(id, state);
+            }
             //this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
         } else {
             // The state was deleted
@@ -416,11 +472,16 @@ class Hapcan extends utils.Adapter {
     // 	}
     // }
 
+
+    // TODO: Po utworzeniu nie zapisuje się aktualny stan. Jest null aż do kolejnego odczytu.
+
     /**
+    * @param {number} node
+    * @param {number} group
      * @param {string} deviceId
      * @param {string} deviceName
      */
-    async createThermometer(deviceId, deviceName) {
+    async createThermometer(node, group, deviceId, deviceName) {
         const channelId = 'thermometer';
         const temperatureId = 'temperature';
         const errorCodeId = 'error_code';
@@ -432,18 +493,18 @@ class Hapcan extends utils.Adapter {
 
         await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
         if (found) {
-            this.log.warn(fullDeviceId + ' found');
+            this.log.info(fullDeviceId + ' found');
             await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
         } else {
-            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName });
-            this.log.warn('Device ' + fullDeviceId + ' created.');
+            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
+            this.log.info('Device ' + fullDeviceId + ' created.');
         }
         if (!found) {
-            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId);
-            this.log.warn('Channel ' + fullChannelId + ' created.');
-            this.createState(deviceId, channelId, temperatureId, {
+            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId, { name: 'Thermometer' }, { type: 'thermometer' });
+            this.log.info('Channel ' + fullChannelId + ' created.');
+            await this.createStateAsync(deviceId, channelId, temperatureId, {
                 name: 'Temperature',
                 type: 'number',
                 role: 'value.temperature',
@@ -451,14 +512,14 @@ class Hapcan extends utils.Adapter {
                 read: true,
                 write: false,
             });
-            this.createState(deviceId, channelId, errorCodeId, {
+            await this.createStateAsync(deviceId, channelId, errorCodeId, {
                 name: 'Error code',
                 type: 'number',
                 role: 'value',
                 read: true,
                 write: false,
             });
-            this.createState(deviceId, channelId, errorMessageId, {
+            await this.createStateAsync(deviceId, channelId, errorMessageId, {
                 name: 'Error message',
                 type: 'string',
                 role: 'text',
@@ -469,10 +530,12 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
-     * @param {string} deviceId
-     * @param {string} deviceName
-     */
-    async createThermostat(deviceId, deviceName) {
+    * @param {number} node
+    * @param {number} group
+    * @param {string} deviceId
+    * @param {string} deviceName
+    */
+    async createThermostat(node, group, deviceId, deviceName) {
         const channelId = 'thermostat';
         const setpointId = 'setpoint';
         const hysteresisId = 'hysteresis';
@@ -485,18 +548,18 @@ class Hapcan extends utils.Adapter {
 
         await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
         if (found) {
-            // this.log.warn('Device ' + fullDeviceId + ' found');
+            // this.log.info('Device ' + fullDeviceId + ' found');
             await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
         } else {
-            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName });
-            this.log.warn('Device ' + fullDeviceId + ' created.');
+            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
+            this.log.info('Device ' + fullDeviceId + ' created.');
         }
         if (!found) {
-            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId);
-            this.log.warn('Channel ' + fullChannelId + ' created.');
-            this.createState(deviceId, channelId, setpointId, {
+            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId, { name: 'Thermostat' }, { type: 'thermostat' });
+            this.log.info('Channel ' + fullChannelId + ' created.');
+            await this.createStateAsync(deviceId, channelId, setpointId, {
                 name: 'Setpoint',
                 type: 'number',
                 role: 'value.temperature',
@@ -504,7 +567,7 @@ class Hapcan extends utils.Adapter {
                 read: true,
                 write: false,
             });
-            this.createState(deviceId, channelId, hysteresisId, {
+            await this.createStateAsync(deviceId, channelId, hysteresisId, {
                 name: 'Hysteresis',
                 type: 'number',
                 role: 'value.temperature',
@@ -512,14 +575,14 @@ class Hapcan extends utils.Adapter {
                 read: true,
                 write: false,
             });
-            this.createState(deviceId, channelId, positionId, {
+            await this.createStateAsync(deviceId, channelId, positionId, {
                 name: 'Position',
                 type: 'string',
                 role: 'indicator.state',
                 read: true,
                 write: false,
             });
-            this.createState(deviceId, channelId, enabledId, {
+            await this.createStateAsync(deviceId, channelId, enabledId, {
                 name: 'Enabled',
                 type: 'boolean',
                 role: 'indicator.plugged',
@@ -530,11 +593,13 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
- * @param {string} deviceId
- * @param {string} deviceName
- * @param {number} buttonsCount
- */
-    async createButtons(deviceId, deviceName, buttonsCount) {
+    * @param {number} node
+    * @param {number} group
+    * @param {string} deviceId
+    * @param {string} deviceName
+    * @param {number} buttonsCount
+    */
+    async createButtons(node, group, deviceId, deviceName, buttonsCount) {
         const channelId = 'buttons';
         const fullDeviceId = this.namespace + '.' + deviceId;
         const fullChannelId = fullDeviceId + '.' + channelId;
@@ -543,54 +608,68 @@ class Hapcan extends utils.Adapter {
 
         await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
         if (found) {
-            // this.log.warn('Device ' + fullDeviceId + ' found');
+            // this.log.info('Device ' + fullDeviceId + ' found');
             await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
         } else {
-            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName });
-            this.log.warn('Device ' + fullDeviceId + ' created.');
+            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
+            this.log.info('Device ' + fullDeviceId + ' created.');
         }
         if (!found) {
-            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId);
-            this.log.warn('Channel ' + fullChannelId + ' created.');
+            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId, { name: 'Buttons' }, { type: 'buttons' });
+            this.log.info('Channel ' + fullChannelId + ' created.');
             for (let i = 1; i <= buttonsCount; i++) {
                 const iValue = this.hex2string(i);
                 const statusId = `${iValue}_status`;
                 const closedId = `${iValue}_closed`;
                 const enabledId = `${iValue}_enabled`;
 
-                this.createState(deviceId, channelId, statusId, {
-                    name: 'Status',
-                    type: 'string',
-                    role: 'indicator.state',
-                    read: true,
-                    write: false,
-                });
-                this.createState(deviceId, channelId, closedId, {
-                    name: 'Closed',
-                    type: 'boolean',
-                    role: 'button',
-                    read: true,
-                    write: false,
-                });
-                this.createState(deviceId, channelId, enabledId, {
-                    name: 'Enabled',
-                    type: 'boolean',
-                    role: 'indicator.plugged',
-                    read: true,
-                    write: false,
-                });
+                await this.createStateAsync(deviceId, channelId, statusId,
+                    {
+                        name: `${iValue} Status`,
+                        type: 'string',
+                        role: 'indicator.state',
+                        read: true,
+                        write: false
+                    },
+                    {
+                        index: i
+                    });
+                await this.createStateAsync(deviceId, channelId, closedId,
+                    {
+                        name: `${iValue} Closed`,
+                        type: 'boolean',
+                        role: 'button',
+                        read: true,
+                        write: false,
+                    },
+                    {
+                        index: i
+                    });
+                await this.createStateAsync(deviceId, channelId, enabledId,
+                    {
+                        name: `${iValue} Enabled`,
+                        type: 'boolean',
+                        role: 'indicator.plugged',
+                        read: true,
+                        write: false,
+                    },
+                    {
+                        index: i
+                    });
             }
         }
     }
 
     /**
-* @param {string} deviceId
-* @param {string} deviceName
-* @param {number} ledsCount
-*/
-    async createLeds(deviceId, deviceName, ledsCount) {
+    * @param {number} node
+    * @param {number} group
+    * @param {string} deviceId
+    * @param {string} deviceName
+    * @param {number} ledsCount
+    */
+    async createLeds(node, group, deviceId, deviceName, ledsCount) {
         const channelId = 'leds';
         const fullDeviceId = this.namespace + '.' + deviceId;
         const fullChannelId = fullDeviceId + '.' + channelId;
@@ -599,46 +678,56 @@ class Hapcan extends utils.Adapter {
 
         await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
         if (found) {
-            // this.log.warn('Device ' + fullDeviceId + ' found');
+            // this.log.info('Device ' + fullDeviceId + ' found');
             await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
         } else {
-            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName });
-            this.log.warn('Device ' + fullDeviceId + ' created.');
+            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
+            this.log.info('Device ' + fullDeviceId + ' created.');
         }
         if (!found) {
-            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId);
-            this.log.warn('Channel ' + fullChannelId + ' created.');
+            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId, { name: 'LEDs' }, { type: 'leds' });
+            this.log.info('Channel ' + fullChannelId + ' created.');
             for (let i = 1; i <= ledsCount; i++) {
                 const iValue = this.hex2string(i);
                 const onId = `${iValue}_on`;
                 const enabledId = `${iValue}_enabled`;
 
-                this.createState(deviceId, channelId, onId, {
-                    name: 'On',
-                    type: 'boolean',
-                    role: 'switch',
-                    read: true,
-                    write: false,
-                });
-                this.createState(deviceId, channelId, enabledId, {
-                    name: 'Enabled',
-                    type: 'boolean',
-                    role: 'indicator.plugged',
-                    read: true,
-                    write: false,
-                });
+                await this.createStateAsync(deviceId, channelId, onId,
+                    {
+                        name: `${iValue} On`,
+                        type: 'boolean',
+                        role: 'switch',
+                        read: true,
+                        write: true,
+                    },
+                    {
+                        index: i
+                    });
+                await this.createStateAsync(deviceId, channelId, enabledId,
+                    {
+                        name: `${iValue} Enabled`,
+                        type: 'boolean',
+                        role: 'indicator.plugged',
+                        read: true,
+                        write: false,
+                    },
+                    {
+                        index: i
+                    });
             }
         }
     }
 
     /**
-* @param {string} deviceId
-* @param {string} deviceName
-* @param {number} relaysCount
-*/
-    async createRelays(deviceId, deviceName, relaysCount) {
+    * @param {number} node
+    * @param {number} group
+    * @param {string} deviceId
+    * @param {string} deviceName
+    * @param {number} relaysCount
+    */
+    async createRelays(node, group, deviceId, deviceName, relaysCount) {
         const channelId = 'relays';
         const fullDeviceId = this.namespace + '.' + deviceId;
         const fullChannelId = fullDeviceId + '.' + channelId;
@@ -647,28 +736,32 @@ class Hapcan extends utils.Adapter {
 
         await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
         if (found) {
-            // this.log.warn('Device ' + fullDeviceId + ' found');
+            // this.log.info('Device ' + fullDeviceId + ' found');
             await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
         } else {
-            this.log.warn('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName });
-            this.log.warn('Device ' + fullDeviceId + ' created.');
+            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
+            this.log.info('Device ' + fullDeviceId + ' created.');
         }
         if (!found) {
-            this.log.warn('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId);
-            this.log.warn('Channel ' + fullChannelId + ' created.');
+            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(deviceId, channelId, { name: 'Relays' }, { type: 'relays' });
+            this.log.info('Channel ' + fullChannelId + ' created.');
             for (let i = 1; i <= relaysCount; i++) {
                 const iValue = this.hex2string(i);
                 const closedId = `${iValue}_closed`;
 
-                this.createState(deviceId, channelId, closedId, {
-                    name: 'Closed',
-                    type: 'boolean',
-                    role: 'switch',
-                    read: true,
-                    write: false,
-                });
+                await this.createStateAsync(deviceId, channelId, closedId,
+                    {
+                        name: `${iValue} Closed`,
+                        type: 'boolean',
+                        role: 'switch',
+                        read: true,
+                        write: false,
+                    },
+                    {
+                        index: i
+                    });
             }
         }
     }
