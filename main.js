@@ -1,5 +1,6 @@
 
 const utils = require('@iobroker/adapter-core');
+const AsyncLock = require('./lib/async-lock.js');
 const Listener = require('./lib/listener.js');
 const Decoder = require('./lib/decoder.js');
 const Encoder = require('./lib/encoder.js');
@@ -17,6 +18,7 @@ class Hapcan extends utils.Adapter {
         this.listener = new Listener();
         this.decoder = new Decoder();
         this.encoder = new Encoder();
+        this._lock = new AsyncLock();
 
         this.listener.on('chunk', (chunk) => this.decoder.put(chunk));
         this.decoder.on('frame', (frameType, flags, node, group, data) => this.readFrame(frameType, flags, node, group, data));
@@ -48,6 +50,7 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
+     * Relays
      * @param {number} flags
      * @param {number} node
      * @param {number} group
@@ -75,17 +78,19 @@ class Hapcan extends utils.Adapter {
         // const INSTR2 = data[6];
         // delay value of waiting instruction, or 0x00 if none waiting
         // const TIMER = data[7];
+        // TODO: handle timer & waiting instruction (how?)
 
         const channel = this.hex2string(CHANNEL);
         const closed = (STATUS == 0xFF);
 
         const relayClosedId = `${deviceId}.relays.${channel}_closed`;
 
-        await this.createRelays(node, group, deviceId, deviceName, 6);
+        await this.createRelays(node, group, { id: deviceId, name: deviceName }, 6);
         await this.setStateAsync(relayClosedId, { val: closed, ack: true });
     }
 
     /**
+     * Buttons
      * @param {number} flags
      * @param {number} node
      * @param {number} group
@@ -119,16 +124,20 @@ class Hapcan extends utils.Adapter {
         // 0x01 disabled
         const LED = data[4];
 
+        // TODO: read count from firmware
+        const channelsCount = 14;
+
         const channel = this.hex2string(CHANNEL);
         const enabled = (BUTTON != 0x01);
         const closed = (BUTTON == 0xFF || BUTTON == 0xFE || BUTTON == 0xFD);
         const status = this.hex2string2(BUTTON); // TODO: enum
 
+        // TODO: get ids from create() function
         const buttonEnabledId = `${deviceId}.buttons.${channel}_enabled`;
         const buttonClosedId = `${deviceId}.buttons.${channel}_closed`;
         const buttonStatusId = `${deviceId}.buttons.${channel}_status`;
 
-        await this.createButtons(node, group, deviceId, deviceName, 14);
+        await this.createButtons(node, group, { id: deviceId, name: deviceName }, channelsCount);
         await this.setStateAsync(buttonEnabledId, { val: enabled, ack: true });
         await this.setStateAsync(buttonClosedId, { val: closed, ack: true });
         await this.setStateAsync(buttonStatusId, { val: status, ack: true });
@@ -139,7 +148,7 @@ class Hapcan extends utils.Adapter {
         const ledEnabledId = `${deviceId}.leds.${channel}_enabled`;
         const ledOnId = `${deviceId}.leds.${channel}_on`;
 
-        await this.createLeds(node, group, deviceId, deviceName, 14);
+        await this.createLeds(node, group, { id: deviceId, name: deviceName }, channelsCount);
         await this.setStateAsync(ledEnabledId, { val: ledEnabled, ack: true });
         await this.setStateAsync(ledOnId, { val: ledOn, ack: true });
     }
@@ -184,8 +193,8 @@ class Hapcan extends utils.Adapter {
             const setpointId = deviceId + '.thermostat.setpoint';
             const hysteresisId = deviceId + '.thermostat.hysteresis';
 
-            await this.createThermometer(node, group, deviceId, deviceName);
-            await this.createThermostat(node, group, deviceId, deviceName);
+            await this.createThermometer(node, group, { id: deviceId, name: deviceName });
+            await this.createThermostat(node, group, { id: deviceId, name: deviceName });
             await this.setStateAsync(temperatureId, { val: temperature, ack: true });
             await this.setStateAsync(setpointId, { val: setpoint, ack: true });
             await this.setStateAsync(hysteresisId, { val: hysteresis, ack: true });
@@ -203,7 +212,7 @@ class Hapcan extends utils.Adapter {
             const positionId = deviceId + '.thermostat.position';
             const enabledId = deviceId + '.thermostat.enabled';
 
-            await this.createThermostat(node, group, deviceId, deviceName);
+            await this.createThermostat(node, group, { id: deviceId, name: deviceName });
             await this.setStateAsync(positionId, { val: position, ack: true });
             await this.setStateAsync(enabledId, { val: enabled, ack: true });
         } else if (data[2] == 0x13) {
@@ -226,7 +235,7 @@ class Hapcan extends utils.Adapter {
             const errorCodeId = deviceId + '.thermometer.error_code';
             const errorMessageId = deviceId + '.thermometer.error_message';
 
-            await this.createThermometer(node, group, deviceId, deviceName);
+            await this.createThermometer(node, group, { id: deviceId, name: deviceName });
             await this.setStateAsync(errorCodeId, { val: errorCode, ack: true });
             await this.setStateAsync(errorMessageId, { val: errorMessage, ack: true });
         } else {
@@ -473,296 +482,281 @@ class Hapcan extends utils.Adapter {
     // }
 
 
-    // TODO: Po utworzeniu nie zapisuje się aktualny stan. Jest null aż do kolejnego odczytu.
+    // TODO: After device is created, state is unknown. Refreshed properly on next state change.
+
+    /**
+     * @param {number} node
+     * @param {number} group
+     * @param {{id: string, name:string}} device
+     * @param {{id: string, name:string, type:string}} channel
+     * @returns {Promise<{found: boolean, states: ioBroker.StateObject[]}>}
+     */
+    async createDeviceChannel2(node, group, device, channel) {
+        // this.log.info('createDeviceChannel2');
+        let found = false;
+        let states = [];
+
+        const fullDeviceId = this.namespace + '.' + device.id;
+        const fullChannelId = fullDeviceId + '.' + channel.id;
+
+        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
+        if (found) {
+            // this.log.info('Device ' + fullDeviceId + ' found.');
+            await this.getChannelsOfAsync(device.id).then(result => { found = result.some(value => value._id === fullChannelId); });
+        } else {
+            //this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
+            await this.createDeviceAsync(device.id, { name: device.name }, { node: node, group: group });
+            this.log.info('Device ' + fullDeviceId + ' created.');
+        }
+        if (!found) {
+            //this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
+            await this.createChannelAsync(device.id, channel.id, { name: channel.name }, { type: channel.type });
+            this.log.info('Channel ' + fullChannelId + ' created.');
+        } else {
+            // this.log.info('Channel ' + fullChannelId + ' found.');
+            await this.getStatesOfAsync(device.id, channel.id).then(result => states = result);
+        }
+
+        //this.log.info(JSON.stringify(states));
+        return { found, states };
+    }
+
+    /**
+ * @param {number} node
+ * @param {number} group
+ * @param {{id: string, name:string}} device
+ * @param {{id: string, name:string, type:string}} channel
+ * @returns {Promise<{found: boolean, states: ioBroker.StateObject[]}>}
+ */
+    async createDeviceChannel(node, group, device, channel) {
+        const _this = this;
+
+        // Read device – create if not exists, read channels – create if not exist: the sequence of operations has to be executed as atom operation.
+        // Two frames from the same device = 2 × try to create.
+        // So lock access to ioBroker objects database.
+
+        const lockName = 'devices & channels';
+
+        // this.log.info('createDeviceChannel[1], isBusy =  ' + this._lock.isBusy(lockName));
+        return this._lock.acquire(lockName, function () {
+            // _this.log.info('createDeviceChannel[2], isBusy =  ' + _this._lock.isBusy(lockName));
+            return _this.createDeviceChannel2(node, group, device, channel);
+        }, {});
+    }
+
+    /**
+ * @param {ioBroker.StateObject[]} states
+ * @param {string} deviceId
+ * @param {string} channelId
+ * @param {string} stateId
+ * @param {Partial<ioBroker.StateCommon>} common
+ * @param {Record<string, any>} native
+ */
+    async checkCreateState(states, deviceId, channelId, stateId, common, native) {
+        const fullStateId = `${this.namespace}.${deviceId}.${channelId}.${stateId}`;
+        if (!states.some(value => value._id === fullStateId)) {
+            return this.createStateAsync(deviceId, channelId, stateId, common, native);
+        }
+    }
 
     /**
     * @param {number} node
     * @param {number} group
-     * @param {string} deviceId
-     * @param {string} deviceName
+     * @param {{id:string, name:string}} device
      */
-    async createThermometer(node, group, deviceId, deviceName) {
-        const channelId = 'thermometer';
-        const temperatureId = 'temperature';
-        const errorCodeId = 'error_code';
-        const errorMessageId = 'error_message';
-        const fullDeviceId = this.namespace + '.' + deviceId;
-        const fullChannelId = fullDeviceId + '.' + channelId;
-
-        let found = false;
-
-        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
-        if (found) {
-            this.log.info(fullDeviceId + ' found');
-            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
-        } else {
-            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
-            this.log.info('Device ' + fullDeviceId + ' created.');
-        }
-        if (!found) {
-            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId, { name: 'Thermometer' }, { type: 'thermometer' });
-            this.log.info('Channel ' + fullChannelId + ' created.');
-            await this.createStateAsync(deviceId, channelId, temperatureId, {
+    async createThermometer(node, group, device) {
+        const channel = { id: 'thermometer', name: 'Thermometer', type: 'thermometer' };
+        const result = await this.createDeviceChannel(node, group, device, channel);
+        await this.checkCreateState(result.states, device.id, channel.id, 'temperature',
+            {
                 name: 'Temperature',
                 type: 'number',
                 role: 'value.temperature',
                 unit: '°C',
                 read: true,
                 write: false,
+            },
+            {
             });
-            await this.createStateAsync(deviceId, channelId, errorCodeId, {
+        await this.checkCreateState(result.states, device.id, channel.id, 'error_code',
+            {
                 name: 'Error code',
                 type: 'number',
                 role: 'value',
                 read: true,
                 write: false,
+            },
+            {
             });
-            await this.createStateAsync(deviceId, channelId, errorMessageId, {
+        await this.checkCreateState(result.states, device.id, channel.id, 'error_mssage',
+            {
                 name: 'Error message',
                 type: 'string',
                 role: 'text',
                 read: true,
                 write: false,
+            },
+            {
             });
-        }
     }
 
     /**
     * @param {number} node
     * @param {number} group
-    * @param {string} deviceId
-    * @param {string} deviceName
+    * @param {{id:string, name:string}} device
     */
-    async createThermostat(node, group, deviceId, deviceName) {
-        const channelId = 'thermostat';
-        const setpointId = 'setpoint';
-        const hysteresisId = 'hysteresis';
-        const positionId = 'position';
-        const enabledId = 'enabled';
-        const fullDeviceId = this.namespace + '.' + deviceId;
-        const fullChannelId = fullDeviceId + '.' + channelId;
-
-        let found = false;
-
-        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
-        if (found) {
-            // this.log.info('Device ' + fullDeviceId + ' found');
-            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
-        } else {
-            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
-            this.log.info('Device ' + fullDeviceId + ' created.');
-        }
-        if (!found) {
-            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId, { name: 'Thermostat' }, { type: 'thermostat' });
-            this.log.info('Channel ' + fullChannelId + ' created.');
-            await this.createStateAsync(deviceId, channelId, setpointId, {
+    async createThermostat(node, group, device) {
+        const channel = { id: 'thermostat', name: 'Thermostat', type: 'thermostat' };
+        const result = await this.createDeviceChannel(node, group, device, channel);
+        await this.checkCreateState(result.states, device.id, channel.id, 'setpoint',
+            {
                 name: 'Setpoint',
                 type: 'number',
                 role: 'value.temperature',
                 unit: '°C',
                 read: true,
                 write: false,
+            },
+            {
             });
-            await this.createStateAsync(deviceId, channelId, hysteresisId, {
+        await this.checkCreateState(result.states, device.id, channel.id, 'hysteresis',
+            {
                 name: 'Hysteresis',
                 type: 'number',
                 role: 'value.temperature',
                 unit: '°C',
                 read: true,
                 write: false,
+            },
+            {
             });
-            await this.createStateAsync(deviceId, channelId, positionId, {
+        await this.checkCreateState(result.states, device.id, channel.id, 'position',
+            {
                 name: 'Position',
                 type: 'string',
                 role: 'indicator.state',
                 read: true,
                 write: false,
+            },
+            {
             });
-            await this.createStateAsync(deviceId, channelId, enabledId, {
+        await this.checkCreateState(result.states, device.id, channel.id, 'enabled',
+            {
                 name: 'Enabled',
                 type: 'boolean',
                 role: 'indicator.plugged',
                 read: true,
                 write: false,
+            },
+            {
             });
-        }
     }
 
     /**
     * @param {number} node
     * @param {number} group
-    * @param {string} deviceId
-    * @param {string} deviceName
+    * @param {{id:string, name:string}} device
     * @param {number} buttonsCount
     */
-    async createButtons(node, group, deviceId, deviceName, buttonsCount) {
-        const channelId = 'buttons';
-        const fullDeviceId = this.namespace + '.' + deviceId;
-        const fullChannelId = fullDeviceId + '.' + channelId;
-
-        let found = false;
-
-        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
-        if (found) {
-            // this.log.info('Device ' + fullDeviceId + ' found');
-            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
-        } else {
-            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
-            this.log.info('Device ' + fullDeviceId + ' created.');
-        }
-        if (!found) {
-            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId, { name: 'Buttons' }, { type: 'buttons' });
-            this.log.info('Channel ' + fullChannelId + ' created.');
-            for (let i = 1; i <= buttonsCount; i++) {
-                const iValue = this.hex2string(i);
-                const statusId = `${iValue}_status`;
-                const closedId = `${iValue}_closed`;
-                const enabledId = `${iValue}_enabled`;
-
-                await this.createStateAsync(deviceId, channelId, statusId,
-                    {
-                        name: `${iValue} Status`,
-                        type: 'string',
-                        role: 'indicator.state',
-                        read: true,
-                        write: false
-                    },
-                    {
-                        index: i
-                    });
-                await this.createStateAsync(deviceId, channelId, closedId,
-                    {
-                        name: `${iValue} Closed`,
-                        type: 'boolean',
-                        role: 'button',
-                        read: true,
-                        write: false,
-                    },
-                    {
-                        index: i
-                    });
-                await this.createStateAsync(deviceId, channelId, enabledId,
-                    {
-                        name: `${iValue} Enabled`,
-                        type: 'boolean',
-                        role: 'indicator.plugged',
-                        read: true,
-                        write: false,
-                    },
-                    {
-                        index: i
-                    });
-            }
+    async createButtons(node, group, device, buttonsCount) {
+        const channel = { id: 'buttons', name: 'Buttons', type: 'buttons' };
+        const result = await this.createDeviceChannel(node, group, device, channel);
+        for (let i = 1; i <= buttonsCount; i++) {
+            const iValue = this.hex2string(i);
+            await this.checkCreateState(result.states, device.id, channel.id, `${iValue}_status`,
+                {
+                    name: `${iValue} Status`,
+                    type: 'string',
+                    role: 'indicator.state',
+                    read: true,
+                    write: false
+                },
+                {
+                    index: i
+                });
+            await this.checkCreateState(result.states, device.id, channel.id, `${iValue}_closed`,
+                {
+                    name: `${iValue} Closed`,
+                    type: 'boolean',
+                    role: 'button',
+                    read: true,
+                    write: false,
+                },
+                {
+                    index: i
+                });
+            await this.checkCreateState(result.states, device.id, channel.id, `${iValue}_enabled`,
+                {
+                    name: `${iValue} Enabled`,
+                    type: 'boolean',
+                    role: 'indicator.plugged',
+                    read: true,
+                    write: false,
+                },
+                {
+                    index: i
+                });
         }
     }
 
     /**
     * @param {number} node
     * @param {number} group
-    * @param {string} deviceId
-    * @param {string} deviceName
+    * @param {{id:string, name:string}} device
     * @param {number} ledsCount
     */
-    async createLeds(node, group, deviceId, deviceName, ledsCount) {
-        const channelId = 'leds';
-        const fullDeviceId = this.namespace + '.' + deviceId;
-        const fullChannelId = fullDeviceId + '.' + channelId;
-
-        let found = false;
-
-        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
-        if (found) {
-            // this.log.info('Device ' + fullDeviceId + ' found');
-            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
-        } else {
-            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
-            this.log.info('Device ' + fullDeviceId + ' created.');
-        }
-        if (!found) {
-            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId, { name: 'LEDs' }, { type: 'leds' });
-            this.log.info('Channel ' + fullChannelId + ' created.');
-            for (let i = 1; i <= ledsCount; i++) {
-                const iValue = this.hex2string(i);
-                const onId = `${iValue}_on`;
-                const enabledId = `${iValue}_enabled`;
-
-                await this.createStateAsync(deviceId, channelId, onId,
-                    {
-                        name: `${iValue} On`,
-                        type: 'boolean',
-                        role: 'switch',
-                        read: true,
-                        write: true,
-                    },
-                    {
-                        index: i
-                    });
-                await this.createStateAsync(deviceId, channelId, enabledId,
-                    {
-                        name: `${iValue} Enabled`,
-                        type: 'boolean',
-                        role: 'indicator.plugged',
-                        read: true,
-                        write: false,
-                    },
-                    {
-                        index: i
-                    });
-            }
+    async createLeds(node, group, device, ledsCount) {
+        const channel = { id: 'leds', name: 'LEDs', type: 'leds' };
+        const result = await this.createDeviceChannel(node, group, device, channel);
+        for (let i = 1; i <= ledsCount; i++) {
+            const iHex = this.hex2string(i);
+            await this.checkCreateState(result.states, device.id, channel.id, `${iHex}_on`,
+                {
+                    name: `${iHex} On`,
+                    type: 'boolean',
+                    role: 'switch',
+                    read: true,
+                    write: true,
+                },
+                {
+                    index: i
+                });
+            await this.checkCreateState(result.states, device.id, channel.id, `${iHex}_enabled`,
+                {
+                    name: `${iHex} Enabled`,
+                    type: 'boolean',
+                    role: 'indicator.plugged',
+                    read: true,
+                    write: false,
+                },
+                {
+                    index: i
+                });
         }
     }
 
     /**
     * @param {number} node
     * @param {number} group
-    * @param {string} deviceId
-    * @param {string} deviceName
+    * @param {{id:string, name:string}} device
     * @param {number} relaysCount
     */
-    async createRelays(node, group, deviceId, deviceName, relaysCount) {
-        const channelId = 'relays';
-        const fullDeviceId = this.namespace + '.' + deviceId;
-        const fullChannelId = fullDeviceId + '.' + channelId;
-
-        let found = false;
-
-        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
-        if (found) {
-            // this.log.info('Device ' + fullDeviceId + ' found');
-            await this.getChannelsOfAsync(deviceId).then(result => { found = result.some(value => value._id === fullChannelId); });
-        } else {
-            this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(deviceId, { name: deviceName }, { node: node, group: group });
-            this.log.info('Device ' + fullDeviceId + ' created.');
-        }
-        if (!found) {
-            this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(deviceId, channelId, { name: 'Relays' }, { type: 'relays' });
-            this.log.info('Channel ' + fullChannelId + ' created.');
-            for (let i = 1; i <= relaysCount; i++) {
-                const iValue = this.hex2string(i);
-                const closedId = `${iValue}_closed`;
-
-                await this.createStateAsync(deviceId, channelId, closedId,
-                    {
-                        name: `${iValue} Closed`,
-                        type: 'boolean',
-                        role: 'switch',
-                        read: true,
-                        write: false,
-                    },
-                    {
-                        index: i
-                    });
-            }
+    async createRelays(node, group, device, relaysCount) {
+        const channel = { id: 'relays', name: 'Relays', type: 'relays' };
+        const result = await this.createDeviceChannel(node, group, device, channel);
+        for (let i = 1; i <= relaysCount; i++) {
+            const iHex = this.hex2string(i);
+            await this.checkCreateState(result.states, device.id, channel.id, `${iHex}_closed`,
+                {
+                    name: `${iHex} Closed`,
+                    type: 'boolean',
+                    role: 'switch',
+                    read: true,
+                    write: true,
+                },
+                {
+                    index: i
+                });
         }
     }
 

@@ -3,7 +3,9 @@ iobrokerHapcanDir=/opt/iobroker/node_modules/iobroker.hapcan
 
 cp io-package.json ${iobrokerHapcanDir}
 cp package.json ${iobrokerHapcanDir}
+cp package-lock.json ${iobrokerHapcanDir}
 cp main.js ${iobrokerHapcanDir}
+cp lib/async-lock.js ${iobrokerHapcanDir}/lib
 cp lib/decoder.js ${iobrokerHapcanDir}/lib
 cp lib/encoder.js ${iobrokerHapcanDir}/lib
 cp lib/listener.js ${iobrokerHapcanDir}/lib
