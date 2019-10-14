@@ -83,19 +83,55 @@ class Hapcan extends utils.Adapter {
         const channel = this.hex2string(CHANNEL);
         const closed = (STATUS == 0xFF);
 
-        const relayClosedId = `${deviceId}.relays.${channel}_closed`;
-
         await this.createRelays(node, group, { id: deviceId, name: deviceName }, 6);
-        await this.setStateAsync(relayClosedId, { val: closed, ack: true });
+        // TODO: get ids from create() function
+        await this.setStateAsync(`${deviceId}.relays.${channel}_closed`, { val: closed, ack: true });
     }
 
     /**
-     * Buttons
+     * Real Time Clock
      * @param {number} flags
      * @param {number} node
      * @param {number} group
      * @param {number[]} data
      */
+    async read300frame(flags, node, group, data) {
+        if (data[0] != 0xFF) {
+            this.log.error('Invalid 300 frame. Expected D0=FF.');
+            return;
+        }
+        const _node = this.hex2string2(node);
+        const _group = this.hex2string2(group);
+        const deviceId = _node + '_' + _group;
+        const deviceName = 'Node ' + _node + ', group ' + _group;
+
+        // 
+        const YEAR = this.bcd2number(data[1]);
+        const MONTH = this.bcd2number(data[2]);
+        const DAY = this.bcd2number(data[3]);
+        //const DAY_OF_WEEK = this.bcd2number(data[4]);
+        const HOUR = this.bcd2number(data[5]);
+        const MINUTE = this.bcd2number(data[6]);
+        const SECOND = this.bcd2number(data[7]);
+
+        const dateTime = new Date(YEAR + 2000, MONTH, DAY, HOUR, MINUTE, SECOND);
+        const dateTimeIso = dateTime.toISOString();
+
+        await this.createRtc(node, group, { id: deviceId, name: deviceName });
+        // TODO: get ids from create() function
+        await this.setStateAsync(`${deviceId}.rtc.date_time_local`, { val: dateTime, ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.date_time`, { val: dateTime, ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.date`, { val: dateTimeIso.slice(0, 10), ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.time`, { val: dateTimeIso.slice(11, 19), ack: true });
+    }
+
+    /**
+ * Buttons
+ * @param {number} flags
+ * @param {number} node
+ * @param {number} group
+ * @param {number[]} data
+ */
     async read301frame(flags, node, group, data) {
         if (data[0] != 0xFF || data[1] != 0xFF) {
             this.log.error('Invalid 301 frame. Expected D0=FF & D1=FF.');
@@ -132,25 +168,19 @@ class Hapcan extends utils.Adapter {
         const closed = (BUTTON == 0xFF || BUTTON == 0xFE || BUTTON == 0xFD);
         const status = this.hex2string2(BUTTON); // TODO: enum
 
-        // TODO: get ids from create() function
-        const buttonEnabledId = `${deviceId}.buttons.${channel}_enabled`;
-        const buttonClosedId = `${deviceId}.buttons.${channel}_closed`;
-        const buttonStatusId = `${deviceId}.buttons.${channel}_status`;
-
         await this.createButtons(node, group, { id: deviceId, name: deviceName }, channelsCount);
-        await this.setStateAsync(buttonEnabledId, { val: enabled, ack: true });
-        await this.setStateAsync(buttonClosedId, { val: closed, ack: true });
-        await this.setStateAsync(buttonStatusId, { val: status, ack: true });
+        // TODO: get ids from create() function
+        await this.setStateAsync(`${deviceId}.buttons.${channel}_enabled`, { val: enabled, ack: true });
+        await this.setStateAsync(`${deviceId}.buttons.${channel}_closed`, { val: closed, ack: true });
+        await this.setStateAsync(`${deviceId}.buttons.${channel}_status`, { val: status, ack: true });
 
         const ledEnabled = (LED != 0x01);
         const ledOn = (LED == 0xFF);
 
-        const ledEnabledId = `${deviceId}.leds.${channel}_enabled`;
-        const ledOnId = `${deviceId}.leds.${channel}_on`;
-
         await this.createLeds(node, group, { id: deviceId, name: deviceName }, channelsCount);
-        await this.setStateAsync(ledEnabledId, { val: ledEnabled, ack: true });
-        await this.setStateAsync(ledOnId, { val: ledOn, ack: true });
+        // TODO: get ids from create() function
+        await this.setStateAsync(`${deviceId}.leds.${channel}_enabled`, { val: ledEnabled, ack: true });
+        await this.setStateAsync(`${deviceId}.leds.${channel}_on`, { val: ledOn, ack: true });
     }
 
     /**
@@ -189,15 +219,12 @@ class Hapcan extends utils.Adapter {
             const setpoint = Number(Number(((SETPOMSB * 256) + SETPOLSB) * 0.0625).toFixed(2));
             const hysteresis = Number(Number(HYSTER * 0.0625).toFixed(4));
 
-            const temperatureId = deviceId + '.thermometer.temperature';
-            const setpointId = deviceId + '.thermostat.setpoint';
-            const hysteresisId = deviceId + '.thermostat.hysteresis';
-
             await this.createThermometer(node, group, { id: deviceId, name: deviceName });
             await this.createThermostat(node, group, { id: deviceId, name: deviceName });
-            await this.setStateAsync(temperatureId, { val: temperature, ack: true });
-            await this.setStateAsync(setpointId, { val: setpoint, ack: true });
-            await this.setStateAsync(hysteresisId, { val: hysteresis, ack: true });
+            // TODO: get ids from create() function
+            await this.setStateAsync(`${deviceId}.thermometer.temperature`, { val: temperature, ack: true });
+            await this.setStateAsync(`${deviceId}.thermostat.setpoint`, { val: setpoint, ack: true });
+            await this.setStateAsync(`${deviceId}.thermostat.hysteresis`, { val: hysteresis, ack: true });
         } else if (data[2] == 0x12) {
             // Thermostat frame
 
@@ -209,12 +236,10 @@ class Hapcan extends utils.Adapter {
             const position = (THERMPOSITION == 0x00) ? 'BELOW' : (THERMPOSITION == 0xFF) ? 'ABOVE' : (THERMPOSITION == 0x80) ? 'POWERUP' : '?';
             const enabled = (THERMSTATE == 0xFF);
 
-            const positionId = deviceId + '.thermostat.position';
-            const enabledId = deviceId + '.thermostat.enabled';
-
             await this.createThermostat(node, group, { id: deviceId, name: deviceName });
-            await this.setStateAsync(positionId, { val: position, ack: true });
-            await this.setStateAsync(enabledId, { val: enabled, ack: true });
+            // TODO: get ids from create() function
+            await this.setStateAsync(`${deviceId}.thermostat.position`, { val: position, ack: true });
+            await this.setStateAsync(`${deviceId}.thermostat.enabled`, { val: enabled, ack: true });
         } else if (data[2] == 0x13) {
             // Controller frame
             // TODO: missing implementation of Controller frame
@@ -232,12 +257,10 @@ class Hapcan extends utils.Adapter {
                 case 0x04: errorMessage = 'Communication problem on 1-wire network (CRC problem)'; break;
             }
 
-            const errorCodeId = deviceId + '.thermometer.error_code';
-            const errorMessageId = deviceId + '.thermometer.error_message';
-
             await this.createThermometer(node, group, { id: deviceId, name: deviceName });
-            await this.setStateAsync(errorCodeId, { val: errorCode, ack: true });
-            await this.setStateAsync(errorMessageId, { val: errorMessage, ack: true });
+            // TODO: get ids from create() function
+            await this.setStateAsync(`${deviceId}.thermometer.error_code`, { val: errorCode, ack: true });
+            await this.setStateAsync(`${deviceId}.thermometer.error_message`, { val: errorMessage, ack: true });
         } else {
             const d2Value = this.hex2string2(data[2]);
             this.log.warn('Unknown 304 frame sub-type. D2=' + d2Value + '.');
@@ -252,31 +275,42 @@ class Hapcan extends utils.Adapter {
      * @param {number[]} data
      */
     async readFrame(frameType, flags, node, group, data) {
-
-        if (frameType == 0x304) {
-            // Thermometer, thermostat
-            this.read304frame(flags, node, group, data);
-        } else if (frameType == 0x301) {
-            // Button
-            this.read301frame(flags, node, group, data);
-        } else if (frameType == 0x302) {
-            // Relay
-            this.read302frame(flags, node, group, data);
-        } else if (frameType == 0x109) {
-            // Status request frame
-            // TODO: missing implementation of Status request frame
-            this.log.warn('Status request frame not implemented');
-        } else if (frameType == 0x113) {
-            // Uptime request frame
-            // TODO: missing implementation of Uptime request frame
-            this.log.warn('Uptime request frame not implemented');
-        } else if (frameType == 0x115) {
-            // Health check frame
-            // TODO: missing implementation of Health check frame
-            this.log.warn('Health check frame not implemented');
-        } else {
-            const frameTypeValue = this.hex2string2(frameType);
-            this.log.warn('Frame type ' + frameTypeValue + ' not implemented.');
+        switch (frameType) {
+            case 0x300: { // Real Time Clock
+                this.read300frame(flags, node, group, data);
+                break;
+            }
+            case 0x301: { // Button
+                this.read301frame(flags, node, group, data);
+                break;
+            }
+            case 0x302: { // Relay
+                this.read302frame(flags, node, group, data);
+                break;
+            }
+            case 0x304: { // Thermometer, thermostat
+                this.read304frame(flags, node, group, data);
+                break;
+            }
+            case 0x109: { // Status request frame
+                // TODO: missing implementation of Status request frame
+                this.log.warn('Status request frame not implemented');
+                break;
+            }
+            case 0x113: { // Uptime request frame
+                // TODO: missing implementation of Uptime request frame
+                this.log.warn('Uptime request frame not implemented');
+                break;
+            }
+            case 0x115: { // Health check frame
+                // TODO: missing implementation of Health check frame
+                this.log.warn('Health check frame not implemented');
+                break;
+            }
+            default: {
+                const frameTypeValue = this.hex2string2(frameType);
+                this.log.warn('Frame type ' + frameTypeValue + ' not implemented.');
+            }
         }
     }
 
@@ -481,9 +515,6 @@ class Hapcan extends utils.Adapter {
     // 	}
     // }
 
-
-    // TODO: After device is created, state is unknown. Refreshed properly on next state change.
-
     /**
      * @param {number} node
      * @param {number} group
@@ -522,12 +553,12 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
- * @param {number} node
- * @param {number} group
- * @param {{id: string, name:string}} device
- * @param {{id: string, name:string, type:string}} channel
- * @returns {Promise<{found: boolean, states: ioBroker.StateObject[]}>}
- */
+    * @param {number} node
+    * @param {number} group
+    * @param {{id: string, name:string}} device
+    * @param {{id: string, name:string, type:string}} channel
+    * @returns {Promise<{found: boolean, states: ioBroker.StateObject[]}>}
+    */
     async createDeviceChannel(node, group, device, channel) {
         const _this = this;
 
@@ -545,13 +576,13 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
- * @param {ioBroker.StateObject[]} states
- * @param {string} deviceId
- * @param {string} channelId
- * @param {string} stateId
- * @param {Partial<ioBroker.StateCommon>} common
- * @param {Record<string, any>} native
- */
+    * @param {ioBroker.StateObject[]} states
+    * @param {string} deviceId
+    * @param {string} channelId
+    * @param {string} stateId
+    * @param {Partial<ioBroker.StateCommon>} common
+    * @param {Record<string, any>} native
+    */
     async checkCreateState(states, deviceId, channelId, stateId, common, native) {
         const fullStateId = `${this.namespace}.${deviceId}.${channelId}.${stateId}`;
         if (!states.some(value => value._id === fullStateId)) {
@@ -761,6 +792,56 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
+* @param {number} node
+* @param {number} group
+* @param {{id:string, name:string}} device
+*/
+    async createRtc(node, group, device) {
+        const channel = { id: 'rtc', name: 'Real Time Clock', type: 'rtc' };
+        const result = await this.createDeviceChannel(node, group, device, channel);
+        await this.checkCreateState(result.states, device.id, channel.id, `date_time_local`,
+            {
+                name: 'RTC (local)',
+                type: 'object',
+                role: 'date',
+                read: true,
+                write: false,
+            },
+            {
+            });
+        await this.checkCreateState(result.states, device.id, channel.id, `date_time`,
+            {
+                name: 'RTC (ISO UTC)',
+                type: 'object',
+                role: 'value.datetime',
+                read: true,
+                write: false,
+            },
+            {
+            });
+        await this.checkCreateState(result.states, device.id, channel.id, `date`,
+            {
+                name: 'RTC (ISO date)',
+                type: 'string',
+                role: 'value',
+                read: true,
+                write: false,
+            },
+            {
+            });
+        await this.checkCreateState(result.states, device.id, channel.id, `time`,
+            {
+                name: 'RTC (ISO time)',
+                type: 'string',
+                role: 'value',
+                read: true,
+                write: false,
+            },
+            {
+            });
+    }
+
+    /**
     * @param {number} hexValue
     */
     hex2string2(hexValue) {
@@ -773,6 +854,16 @@ class Hapcan extends utils.Adapter {
     hex2string(hexValue) {
         return hexValue.toString(16).toUpperCase();
     }
+
+    /**
+    * @param {number} bcdValue
+    */
+    bcd2number(bcdValue) {
+        const tensDigit = (bcdValue & 0xF0) >> 4;
+        const unitDigit = bcdValue & 0x0F;
+        return 10 * tensDigit + unitDigit;
+    }
+
 }
 
 // @ts-ignore parent is a valid property on module
