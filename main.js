@@ -821,7 +821,7 @@ class Hapcan extends utils.Adapter {
             });
         await this.checkCreateState(result.states, device.id, channel.id, `date`,
             {
-                name: 'RTC (ISO date)',
+                name: 'RTC (ISO UTC date)',
                 type: 'string',
                 role: 'value',
                 read: true,
@@ -831,7 +831,7 @@ class Hapcan extends utils.Adapter {
             });
         await this.checkCreateState(result.states, device.id, channel.id, `time`,
             {
-                name: 'RTC (ISO time)',
+                name: 'RTC (ISO UTC time)',
                 type: 'string',
                 role: 'value',
                 read: true,
