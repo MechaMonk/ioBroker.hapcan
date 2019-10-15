@@ -646,9 +646,10 @@ class Hapcan extends utils.Adapter {
                 role: 'value.temperature',
                 unit: '°C',
                 read: true,
-                write: false,
+                write: true,
             },
             {
+                type: 'setpoint'
             });
         await this.checkCreateState(result.states, device.id, channel.id, 'hysteresis',
             {
@@ -677,9 +678,10 @@ class Hapcan extends utils.Adapter {
                 type: 'boolean',
                 role: 'indicator.plugged',
                 read: true,
-                write: false,
+                write: true,
             },
             {
+                type: 'enabled'
             });
     }
 
