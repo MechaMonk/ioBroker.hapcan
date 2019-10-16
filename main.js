@@ -1,9 +1,9 @@
 
 const utils = require('@iobroker/adapter-core');
-const AsyncLock = require('./lib/async-lock.js');
 const Listener = require('./lib/listener.js');
 const Decoder = require('./lib/decoder.js');
 const Encoder = require('./lib/encoder.js');
+const Creator = require('./lib/creator.js');
 
 class Hapcan extends utils.Adapter {
     /**
@@ -15,24 +15,24 @@ class Hapcan extends utils.Adapter {
             name: 'hapcan'
         });
 
-        this.listener = new Listener();
+        this.creator = new Creator(this);
         this.decoder = new Decoder();
         this.encoder = new Encoder();
-        this._lock = new AsyncLock();
+        this.listener = new Listener();
 
         this.listener.on('chunk', (chunk) => this.decoder.put(chunk));
         this.decoder.on('frame', (frameType, flags, node, group, data) => this.readFrame(frameType, flags, node, group, data));
         this.encoder.on('frame', (data) => this.listener.write(data));
 
-        this.listener.on('logInfo', (msg) => this.log.info(msg));
-        this.listener.on('logWarn', (msg) => this.log.warn(msg));
-        this.listener.on('logError', (msg) => this.log.error(msg));
         this.decoder.on('logInfo', (msg) => this.log.info(msg));
         this.decoder.on('logWarn', (msg) => this.log.warn(msg));
         this.decoder.on('logError', (msg) => this.log.error(msg));
         this.encoder.on('logInfo', (msg) => this.log.info(msg));
         this.encoder.on('logWarn', (msg) => this.log.warn(msg));
         this.encoder.on('logError', (msg) => this.log.error(msg));
+        this.listener.on('logInfo', (msg) => this.log.info(msg));
+        this.listener.on('logWarn', (msg) => this.log.warn(msg));
+        this.listener.on('logError', (msg) => this.log.error(msg));
 
         this.on('ready', this.onReady.bind(this));
         this.on('objectChange', this.onObjectChange.bind(this));
@@ -114,15 +114,30 @@ class Hapcan extends utils.Adapter {
         const MINUTE = this.bcd2number(data[6]);
         const SECOND = this.bcd2number(data[7]);
 
-        const dateTime = new Date(YEAR + 2000, MONTH, DAY, HOUR, MINUTE, SECOND);
-        const dateTimeIso = dateTime.toISOString();
+        const dateTimeUTC = new Date(YEAR + 2000, MONTH - 1, DAY, HOUR, MINUTE, SECOND);
+        const dateTimeLocalIso = this.dateToLocalISO(dateTimeUTC);
+        // this.log.info(`dateTime = ${dateTime}`);
+        // this.log.info(`dateTimeIso = ${dateTimeIso}`);
 
         await this.createRtc(node, group, { id: deviceId, name: deviceName });
         // TODO: get ids from create() function
-        await this.setStateAsync(`${deviceId}.rtc.date_time_local`, { val: dateTime, ack: true });
-        await this.setStateAsync(`${deviceId}.rtc.date_time`, { val: dateTime, ack: true });
-        await this.setStateAsync(`${deviceId}.rtc.date`, { val: dateTimeIso.slice(0, 10), ack: true });
-        await this.setStateAsync(`${deviceId}.rtc.time`, { val: dateTimeIso.slice(11, 19), ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.date_time1`, { val: dateTimeLocalIso, ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.date_time2`, { val: dateTimeLocalIso, ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.date`, { val: dateTimeLocalIso.slice(0, 10), ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.time`, { val: dateTimeLocalIso.slice(11, 19), ack: true });
+        await this.setStateAsync(`${deviceId}.rtc.timestamp`, { val: dateTimeUTC, ack: true });
+    }
+
+    /**
+     * @param {Date} date
+     */
+    dateToLocalISO(date) {
+        const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+        const msLocal = date.getTime() - offsetMs;
+        const dateLocal = new Date(msLocal);
+        const iso = dateLocal.toISOString();
+        const isoLocal = iso.slice(0, 19);
+        return isoLocal;
     }
 
     /**
@@ -372,8 +387,7 @@ class Hapcan extends utils.Adapter {
        * Is called when databases are connected and adapter received configuration.
        */
     async onReady() {
-        // Initialize your adapter here
-        //const hapcan = this;
+        this.creator = new Creator(this);
 
         this.connect();
         this.subscribeStates('*');
@@ -515,65 +529,6 @@ class Hapcan extends utils.Adapter {
     // 	}
     // }
 
-    /**
-     * @param {number} node
-     * @param {number} group
-     * @param {{id: string, name:string}} device
-     * @param {{id: string, name:string, type:string}} channel
-     * @returns {Promise<{found: boolean, states: ioBroker.StateObject[]}>}
-     */
-    async createDeviceChannel2(node, group, device, channel) {
-        // this.log.info('createDeviceChannel2');
-        let found = false;
-        let states = [];
-
-        const fullDeviceId = this.namespace + '.' + device.id;
-        const fullChannelId = fullDeviceId + '.' + channel.id;
-
-        await this.getDevicesAsync().then(result => { found = result.some(value => value._id === fullDeviceId); });
-        if (found) {
-            // this.log.info('Device ' + fullDeviceId + ' found.');
-            await this.getChannelsOfAsync(device.id).then(result => { found = result.some(value => value._id === fullChannelId); });
-        } else {
-            //this.log.info('Device ' + fullDeviceId + ' NOT found. Creating.');
-            await this.createDeviceAsync(device.id, { name: device.name }, { node: node, group: group });
-            this.log.info('Device ' + fullDeviceId + ' created.');
-        }
-        if (!found) {
-            //this.log.info('Channel ' + fullChannelId + ' NOT found. Creating.');
-            await this.createChannelAsync(device.id, channel.id, { name: channel.name }, { type: channel.type });
-            this.log.info('Channel ' + fullChannelId + ' created.');
-        } else {
-            // this.log.info('Channel ' + fullChannelId + ' found.');
-            await this.getStatesOfAsync(device.id, channel.id).then(result => states = result);
-        }
-
-        //this.log.info(JSON.stringify(states));
-        return { found, states };
-    }
-
-    /**
-    * @param {number} node
-    * @param {number} group
-    * @param {{id: string, name:string}} device
-    * @param {{id: string, name:string, type:string}} channel
-    * @returns {Promise<{found: boolean, states: ioBroker.StateObject[]}>}
-    */
-    async createDeviceChannel(node, group, device, channel) {
-        const _this = this;
-
-        // Read device – create if not exists, read channels – create if not exist: the sequence of operations has to be executed as atom operation.
-        // Two frames from the same device = 2 × try to create.
-        // So lock access to ioBroker objects database.
-
-        const lockName = 'devices & channels';
-
-        // this.log.info('createDeviceChannel[1], isBusy =  ' + this._lock.isBusy(lockName));
-        return this._lock.acquire(lockName, function () {
-            // _this.log.info('createDeviceChannel[2], isBusy =  ' + _this._lock.isBusy(lockName));
-            return _this.createDeviceChannel2(node, group, device, channel);
-        }, {});
-    }
 
     /**
     * @param {ioBroker.StateObject[]} states
@@ -597,7 +552,7 @@ class Hapcan extends utils.Adapter {
      */
     async createThermometer(node, group, device) {
         const channel = { id: 'thermometer', name: 'Thermometer', type: 'thermometer' };
-        const result = await this.createDeviceChannel(node, group, device, channel);
+        const result = await this.creator.createDeviceChannel(node, group, device, channel);
         await this.checkCreateState(result.states, device.id, channel.id, 'temperature',
             {
                 name: 'Temperature',
@@ -638,7 +593,7 @@ class Hapcan extends utils.Adapter {
     */
     async createThermostat(node, group, device) {
         const channel = { id: 'thermostat', name: 'Thermostat', type: 'thermostat' };
-        const result = await this.createDeviceChannel(node, group, device, channel);
+        const result = await this.creator.createDeviceChannel(node, group, device, channel);
         await this.checkCreateState(result.states, device.id, channel.id, 'setpoint',
             {
                 name: 'Setpoint',
@@ -693,7 +648,7 @@ class Hapcan extends utils.Adapter {
     */
     async createButtons(node, group, device, buttonsCount) {
         const channel = { id: 'buttons', name: 'Buttons', type: 'buttons' };
-        const result = await this.createDeviceChannel(node, group, device, channel);
+        const result = await this.creator.createDeviceChannel(node, group, device, channel);
         for (let i = 1; i <= buttonsCount; i++) {
             const iValue = this.hex2string(i);
             await this.checkCreateState(result.states, device.id, channel.id, `${iValue}_status`,
@@ -740,7 +695,7 @@ class Hapcan extends utils.Adapter {
     */
     async createLeds(node, group, device, ledsCount) {
         const channel = { id: 'leds', name: 'LEDs', type: 'leds' };
-        const result = await this.createDeviceChannel(node, group, device, channel);
+        const result = await this.creator.createDeviceChannel(node, group, device, channel);
         for (let i = 1; i <= ledsCount; i++) {
             const iHex = this.hex2string(i);
             await this.checkCreateState(result.states, device.id, channel.id, `${iHex}_on`,
@@ -776,7 +731,7 @@ class Hapcan extends utils.Adapter {
     */
     async createRelays(node, group, device, relaysCount) {
         const channel = { id: 'relays', name: 'Relays', type: 'relays' };
-        const result = await this.createDeviceChannel(node, group, device, channel);
+        const result = await this.creator.createDeviceChannel(node, group, device, channel);
         for (let i = 1; i <= relaysCount; i++) {
             const iHex = this.hex2string(i);
             await this.checkCreateState(result.states, device.id, channel.id, `${iHex}_closed`,
@@ -800,10 +755,10 @@ class Hapcan extends utils.Adapter {
 */
     async createRtc(node, group, device) {
         const channel = { id: 'rtc', name: 'Real Time Clock', type: 'rtc' };
-        const result = await this.createDeviceChannel(node, group, device, channel);
-        await this.checkCreateState(result.states, device.id, channel.id, `date_time_local`,
+        const result = await this.creator.createDeviceChannel(node, group, device, channel);
+        await this.checkCreateState(result.states, device.id, channel.id, `date_time1`,
             {
-                name: 'RTC (local)',
+                name: 'Date + time (local)',
                 type: 'object',
                 role: 'date',
                 read: true,
@@ -811,9 +766,9 @@ class Hapcan extends utils.Adapter {
             },
             {
             });
-        await this.checkCreateState(result.states, device.id, channel.id, `date_time`,
+        await this.checkCreateState(result.states, device.id, channel.id, `date_time2`,
             {
-                name: 'RTC (ISO UTC)',
+                name: 'Date + time (local)',
                 type: 'object',
                 role: 'value.datetime',
                 read: true,
@@ -823,7 +778,7 @@ class Hapcan extends utils.Adapter {
             });
         await this.checkCreateState(result.states, device.id, channel.id, `date`,
             {
-                name: 'RTC (ISO UTC date)',
+                name: 'Date (local)',
                 type: 'string',
                 role: 'value',
                 read: true,
@@ -833,9 +788,19 @@ class Hapcan extends utils.Adapter {
             });
         await this.checkCreateState(result.states, device.id, channel.id, `time`,
             {
-                name: 'RTC (ISO UTC time)',
+                name: 'Time (local)',
                 type: 'string',
                 role: 'value',
+                read: true,
+                write: false,
+            },
+            {
+            });
+        await this.checkCreateState(result.states, device.id, channel.id, `timestamp`,
+            {
+                name: 'UTC date + time',
+                type: 'object',
+                role: 'value.datetime',
                 read: true,
                 write: false,
             },

@@ -6,6 +6,7 @@ cp package.json ${iobrokerHapcanDir}
 cp package-lock.json ${iobrokerHapcanDir}
 cp main.js ${iobrokerHapcanDir}
 cp lib/async-lock.js ${iobrokerHapcanDir}/lib
+cp lib/creator.js ${iobrokerHapcanDir}/lib
 cp lib/decoder.js ${iobrokerHapcanDir}/lib
 cp lib/encoder.js ${iobrokerHapcanDir}/lib
 cp lib/listener.js ${iobrokerHapcanDir}/lib
