@@ -10,6 +10,8 @@ cp lib/creator.js ${iobrokerHapcanDir}/lib
 cp lib/decoder.js ${iobrokerHapcanDir}/lib
 cp lib/encoder.js ${iobrokerHapcanDir}/lib
 cp lib/listener.js ${iobrokerHapcanDir}/lib
+cp lib/reader.js ${iobrokerHapcanDir}/lib
+cp lib/tools.js ${iobrokerHapcanDir}/lib
 cp admin/hapcan.png ${iobrokerHapcanDir}/admin
 cp admin/index_m.html ${iobrokerHapcanDir}/admin
 cp admin/words.js ${iobrokerHapcanDir}/admin
