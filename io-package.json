@@ -55,7 +55,7 @@
         "main": "main.js",
         "icon": "hapcan_logo.png",
         "enabled": true,
-        "extIcon": "https://raw.githubusercontent.com/mariusz-n/ioBroker.hapcan/master/admin/hapcan.png",
+        "extIcon": "https://raw.githubusercontent.com/mariusz-n/ioBroker.hapcan/master/admin/hapcan_logo.png",
         "readme": "https://github.com/mariusz-n/ioBroker.hapcan/blob/master/README.md",
         "loglevel": "info",
         "mode": "daemon",
