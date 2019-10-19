@@ -1,5 +1,6 @@
 
 const utils = require('@iobroker/adapter-core');
+const Creator = require('./lib/creator.js');
 const Decoder = require('./lib/decoder.js');
 const Encoder = require('./lib/encoder.js');
 const Listener = require('./lib/listener.js');
@@ -15,99 +16,80 @@ class Hapcan extends utils.Adapter {
             name: 'hapcan'
         });
 
-        this.decoder = new Decoder();
-        this.encoder = new Encoder();
+        // TODO: configuration
+        this.gateIPAddress = '192.168.7.22';
+        this.gatePort = 1010;
+        this.reconnectInterval = 7000;
+
         this.listener = new Listener();
-        this.reader = new Reader(this);
-
-        this.listener.on('chunk', (chunk) => this.decoder.put(chunk));
-        this.decoder.on('frame', (frameType, flags, node, group, data) => this.reader.readFrame(frameType, flags, node, group, data));
-        this.encoder.on('frame', (data) => this.listener.write(data));
-
-        this.decoder.on('logInfo', (msg) => this.log.info(msg));
-        this.decoder.on('logWarn', (msg) => this.log.warn(msg));
-        this.decoder.on('logError', (msg) => this.log.error(msg));
-        this.encoder.on('logInfo', (msg) => this.log.info(msg));
-        this.encoder.on('logWarn', (msg) => this.log.warn(msg));
-        this.encoder.on('logError', (msg) => this.log.error(msg));
-        this.listener.on('logInfo', (msg) => this.log.info(msg));
-        this.listener.on('logWarn', (msg) => this.log.warn(msg));
-        this.listener.on('logError', (msg) => this.log.error(msg));
 
         this.on('ready', this.onReady.bind(this));
         this.on('objectChange', this.onObjectChange.bind(this));
-        this.on('stateChange', this.onStateChange.bind(this));
+        // this.on('stateChange', this.onStateChange.bind(this));
         //this.on('message', this.onMessage.bind(this));
         this.on('unload', this.onUnload.bind(this));
     }
 
     connect() {
         // HAPCAN:
-        this.listener.connect('192.168.7.22', 1010);
+        this.listener.connect(this.gateIPAddress, this.gatePort);
 
         // Testing:
         //this.listener.connect('192.168.7.200', 22222);
     }
 
-    /**
-           * @param {string} id
-           * @param {ioBroker.State | null | undefined} state
-           */
-    async updateState(id, state) {
-        await this.getObjectAsync(id).then(async stateObject => {
-            if (stateObject === undefined || stateObject == null) {
-                this.log.warn(`Object ${id} NOT found. State change ignored.`);
-                return;
-            } else if (stateObject.type !== 'state') {
-                this.log.warn(`Object ${id} is NOT the state object. State change ignored.`);
-                return;
-            }
-            if (!stateObject.common.write) {
-                this.log.warn(`State object ${id} is NOT writable. State change ignored.`);
-                return;
-            }
-            if (state === undefined || state == null) {
-                this.log.warn(`State of ${id} is empty. State change ignored.`);
-                return;
-            }
-            // this.log.info(`State object ${id} found`);
-            // this.log.info(`typeof result = ${typeof result}`);
 
-            // ex: 'hapcan.0.01_03.leds.1_on'
-            // Delete state & channel id
-            const channelId = id.slice(0, id.lastIndexOf('.'));
-            // this.log.info(channelId);
-            await this.getObjectAsync(channelId).then(async channelObject => {
-                if (channelObject === undefined || channelObject == null) {
-                    this.log.warn(`Channel ${id} NOT found. State change ignored.`);
-                    return;
-                } else if (channelObject.type !== 'channel') {
-                    this.log.warn(`Object ${id} is NOT the channel object. State change ignored.`);
-                    return;
-                }
-
-                const deviceId = channelId.slice(0, channelId.lastIndexOf('.'));
-                // this.log.info(deviceId);
-                await this.getObjectAsync(deviceId).then(async deviceObject => {
-                    if (deviceObject === undefined || deviceObject == null) {
-                        this.log.warn(`Device ${id} NOT found. State change ignored.`);
-                        return;
-                    } else if (deviceObject.type !== 'device') {
-                        this.log.warn(`Object ${id} is NOT the device object. State change ignored.`);
-                        return;
-                    }
-
-                    await this.encoder.writeState(deviceObject, channelObject, stateObject, state);
-                });
-            });
-        });
-    }
 
     /**
        * Is called when databases are connected and adapter received configuration.
        */
     async onReady() {
-        this.reader = new Reader(this);
+        const decoder = new Decoder(this.log);
+        const encoder = new Encoder(this.getObjectAsync, this.log);
+        const reader = new Reader(new Creator(this), this.setStateAsync, this.log);
+
+        const _this = this;
+        const reconnect =
+            /**
+             * @param {boolean} had_error
+             */
+            function (had_error) {
+                if (had_error) {
+                    _this.log.info(`Reconnect scheduled in ${_this.reconnectInterval} ms`);
+                    setTimeout(() => {
+                        _this.connect();
+                    }, _this.reconnectInterval);
+                }
+            };
+
+        /**
+         * @param {string} id
+         * @param {ioBroker.State | null | undefined} state
+         **/
+        const onStateChange = function (id, state) {
+            if (state) {
+                // The state was changed
+                if (!state.ack) {
+                    _this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+                    encoder.updateState(id, state);
+                }
+                //this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+            } else {
+                // The state was deleted
+                //this.log.info(`state ${id} deleted`);
+            }
+        };
+
+        this.listener.on('close', reconnect);
+        this.listener.on('chunk', (chunk) => decoder.put(chunk));
+        decoder.on('frame', (frameType, flags, node, group, data) => reader.readFrame(frameType, flags, node, group, data));
+        encoder.on('frame', (data) => this.listener.write(data));
+
+        this.listener.on('log.info', (message) => this.logInfo(message));
+        this.listener.on('log.warn', (message) => this.log.warn(message));
+        this.listener.on('log.error', (message) => this.log.error(message));
+
+        this.on('stateChange', onStateChange);
 
         this.connect();
         this.subscribeStates('*');
@@ -185,6 +167,13 @@ class Hapcan extends utils.Adapter {
     }
 
     /**
+     * @param {string} message
+     */
+    async logInfo(message) {
+        this.log.info(message);
+    }
+
+    /**
        * Is called when adapter shuts down - callback has to be called under any circumstances!
        * @param {() => void} callback
        */
@@ -213,24 +202,24 @@ class Hapcan extends utils.Adapter {
         }
     }
 
-    /**
-       * Is called if a subscribed state changes
-       * @param {string} id
-       * @param {ioBroker.State | null | undefined} state
-       */
-    onStateChange(id, state) {
-        if (state) {
-            // The state was changed
-            if (!state.ack) {
-                this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
-                this.updateState(id, state);
-            }
-            //this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
-        } else {
-            // The state was deleted
-            //this.log.info(`state ${id} deleted`);
-        }
-    }
+    // /**
+    //    * Is called if a subscribed state changes
+    //    * @param {string} id
+    //    * @param {ioBroker.State | null | undefined} state
+    //    */
+    // onStateChange(id, state) {
+    //     if (state) {
+    //         // The state was changed
+    //         if (!state.ack) {
+    //             this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+    //             this.encoder.updateState(id, state);
+    //         }
+    //         //this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+    //     } else {
+    //         // The state was deleted
+    //         //this.log.info(`state ${id} deleted`);
+    //     }
+    // }
 
     // /**
     //  * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
