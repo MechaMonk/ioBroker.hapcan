@@ -46,7 +46,8 @@ class Hapcan extends utils.Adapter {
     async onReady() {
         const decoder = new Decoder(this.log);
         const encoder = new Encoder(this.getObjectAsync, this.log);
-        const reader = new Reader(new Creator(this), this.setStateAsync, this.log);
+        const creator = new Creator(this);
+        const reader = new Reader(this, creator);
 
         const _this = this;
         const reconnect =
@@ -84,6 +85,8 @@ class Hapcan extends utils.Adapter {
         this.listener.on('chunk', (chunk) => decoder.put(chunk));
         decoder.on('frame', (frameType, flags, node, group, data) => reader.readFrame(frameType, flags, node, group, data));
         encoder.on('frame', (data) => this.listener.write(data));
+        creator.on('deviceCreated', (node, group) => setTimeout(() => encoder.nodeDescriptionRequest(node, group), 3000));
+        // TODO: creator.on('channelCreated', (node, group) => { });
 
         this.listener.on('log.info', (message) => this.logInfo(message));
         this.listener.on('log.warn', (message) => this.log.warn(message));
