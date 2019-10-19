@@ -67,24 +67,44 @@
 
         <div class="row">
             <div class="col s12 m4 l2">
-                <img src="hapcan.png" class="logo">
+                <img src="hapcan_landscape.png" width="200" height="100">
             </div>
         </div>
 
-        <!-- Put your content here -->
-
-        <!-- For example columns with settings: -->
         <div class="row">
-            <div class="col s6 input-field">
-                <input type="checkbox" class="value" id="option1" />
-                <label for="option1" class="translate">option1</label>
+            <div class="row input-field">
+                <div class="col s3">
+                    <input type="text" class="value" id="gateIPAddress" />
+                    <label for="gateIPAddress" class="translate">HAPCAN Ethernet Interface IP</label>
+                </div>
             </div>
-
-            <div class="col s6 input-field">
-                <input type="text" class="value" id="option2" />
-                <label for="option2" class="translate">option2</label>
+            <div class="row input-field">
+                <div class="col s3">
+                    <input type="number" class="value" id="gatePort" />
+                    <label for="gatePort" class="translate">HAPCAN Ethernet Interface port</label>
+                </div>
+            </div>
+            <div class="row input-field">
+                <div class="col s3">
+                    <input type="number" class="value" id="reconnectInterval" />
+                    <label for="reconnectInterval" class="translate">Reconnect interval (in seconds)</label>
+                </div>
             </div>
         </div>
+
+        <p></p>
+
+        <div class="row input-field">
+            <div class="col s2">
+                <input type="number" class="value" id="compId1" />
+                <label for="compId1" class="translate">Computer identifier for requests: 1st byte (0-255)</label>
+            </div>
+            <div class="col s2">
+                <input type="number" class="value" id="compId2" />
+                <label for="compId2" class="translate">Computer identifier for requests: 2nd byte (0-255)</label>
+            </div>
+        </div>
+
 
     </div>
 

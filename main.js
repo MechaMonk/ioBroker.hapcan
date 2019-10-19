@@ -16,11 +16,6 @@ class Hapcan extends utils.Adapter {
             name: 'hapcan'
         });
 
-        // TODO: configuration
-        this.gateIPAddress = '192.168.7.22';
-        this.gatePort = 1010;
-        this.reconnectInterval = 7000;
-
         this.listener = new Listener();
 
         this.on('ready', this.onReady.bind(this));
@@ -32,20 +27,18 @@ class Hapcan extends utils.Adapter {
 
     connect() {
         // HAPCAN:
-        this.listener.connect(this.gateIPAddress, this.gatePort);
+        this.listener.connect(this.config.gateIPAddress, this.config.gatePort);
 
         // Testing:
         //this.listener.connect('192.168.7.200', 22222);
     }
-
-
 
     /**
        * Is called when databases are connected and adapter received configuration.
        */
     async onReady() {
         const decoder = new Decoder(this.log);
-        const encoder = new Encoder(this.getObjectAsync, this.log);
+        const encoder = new Encoder(this.getObjectAsync, this.log, this.config);
         const creator = new Creator(this);
         const reader = new Reader(this, creator);
 
@@ -56,10 +49,14 @@ class Hapcan extends utils.Adapter {
              */
             function (had_error) {
                 if (had_error) {
-                    _this.log.info(`Reconnect scheduled in ${_this.reconnectInterval} ms`);
-                    setTimeout(() => {
-                        _this.connect();
-                    }, _this.reconnectInterval);
+                    if (_this.config.reconnectInterval > 0) {
+                        _this.log.info(`Reconnect scheduled in ${_this.config.reconnectInterval} seconds`);
+                        setTimeout(() => {
+                            _this.connect();
+                        }, _this.config.reconnectInterval * 1000);
+                    } else {
+                        _this.log.info(`Reconnect disabled (value ${_this.config.reconnectInterval} in adapter configuration)`);
+                    }
                 }
             };
 
@@ -121,52 +118,6 @@ class Hapcan extends utils.Adapter {
                     }
                 });
         */
-
-        // The adapters config (in the instance object everything under the attribute 'native') is accessible via
-        // this.config:
-        //this.log.info('config option1: ' + this.config.option1);
-        //this.log.info('config option2: ' + this.config.option2);
-
-        /*
-            For every state in the system there has to be also an object of type state
-            Here a simple template for a boolean variable named 'testVariable'
-            Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
-            */
-        // await this.setObjectAsync('testVariable', {
-        //     type: 'state',
-        //     common: {
-        //         name: 'testVariable',
-        //         type: 'boolean',
-        //         role: 'indicator',
-        //         read: true,
-        //         write: true,
-        //     },
-        //     native: {},
-        // });
-
-        // in this template all states changes inside the adapters namespace are subscribed
-        //this.subscribeStates('*');
-
-        /*
-            setState examples
-            you will notice that each setState will cause the stateChange event to fire (because of above subscribeStates cmd)
-            */
-        // the variable testVariable is set to true as command (ack=false)
-        //await this.setStateAsync('testVariable', true);
-
-        // same thing, but the value is flagged 'ack'
-        // ack should be always set to true if the value is received from or acknowledged from the target system
-        //await this.setStateAsync('testVariable', { val: true, ack: true });
-
-        // same thing, but the state is deleted after 30s (getState will return null afterwards)
-        //await this.setStateAsync('testVariable', { val: true, ack: true, expire: 30 });
-
-        // examples for the checkPassword/checkGroup functions
-        //let result = await this.checkPasswordAsync('admin', 'iobroker');
-        //this.log.info('check user admin pw ioboker: ' + result);
-
-        //result = await this.checkGroupAsync('admin', 'admin');
-        //this.log.info('check group user admin group admin: ' + result);
     }
 
     /**
@@ -204,25 +155,6 @@ class Hapcan extends utils.Adapter {
             //this.log.info(`object ${id} deleted`);
         }
     }
-
-    // /**
-    //    * Is called if a subscribed state changes
-    //    * @param {string} id
-    //    * @param {ioBroker.State | null | undefined} state
-    //    */
-    // onStateChange(id, state) {
-    //     if (state) {
-    //         // The state was changed
-    //         if (!state.ack) {
-    //             this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
-    //             this.encoder.updateState(id, state);
-    //         }
-    //         //this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
-    //     } else {
-    //         // The state was deleted
-    //         //this.log.info(`state ${id} deleted`);
-    //     }
-    // }
 
     // /**
     //  * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
