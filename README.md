@@ -1,4 +1,5 @@
-![Logo](admin/hapcan_landscape.png)
+<img src="admin/hapcan_landscape.png" width="200" height="100"/>
+
 # ioBroker.hapcan
 
 [![NPM version](http://img.shields.io/npm/v/iobroker.hapcan.svg)](https://www.npmjs.com/package/iobroker.hapcan)
