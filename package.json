@@ -1,7 +1,7 @@
 {
   "name": "iobroker.hapcan",
-  "version": "0.0.1",
-  "description": "HAPCAN",
+  "version": "0.9.0",
+  "description": "HAPCAN ioBroker adapter",
   "author": {
     "name": "mariusz-n",
     "email": "mn.git@earth.net.pl"

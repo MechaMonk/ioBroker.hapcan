@@ -1,53 +1,29 @@
 {
     "common": {
         "name": "hapcan",
-        "version": "0.0.1",
+        "version": "0.9.0",
         "news": {
-            "0.0.1": {
-                "en": "initial release",
-                "de": "Erstveröffentlichung",
-                "ru": "Начальная версия",
-                "pt": "lançamento inicial",
-                "nl": "Eerste uitgave",
-                "fr": "Première version",
-                "it": "Versione iniziale",
-                "es": "Versión inicial",
-                "pl": "Pierwsze wydanie",
-                "zh-cn": "首次出版"
+            "0.9.0": {
+                "en": "Initial release",
+                "pl": "Pierwsze wydanie"
             }
         },
         "title": "HAPCAN",
         "titleLang": {
             "en": "HAPCAN",
-            "de": "HAPCAN",
-            "ru": "HAPCAN",
-            "pt": "HAPCAN",
-            "nl": "HAPCAN",
-            "fr": "HAPCAN",
-            "it": "HAPCAN",
-            "es": "HAPCAN",
-            "pl": "HAPCAN",
-            "zh-cn": "HAPCAN"
+            "pl": "HAPCAN"
         },
         "desc": {
             "en": "hapcan",
-            "de": "hapcan",
-            "ru": "hapcan",
-            "pt": "hapcan",
-            "nl": "hapcan",
-            "fr": "hapcan",
-            "it": "hapcan",
-            "es": "hapcan",
-            "pl": "hapcan",
-            "zh-cn": "hapcan"
+            "pl": "hapcan"
         },
         "authors": [
             "mariusz-n <mn.git@earth.net.pl>"
         ],
         "keywords": [
             "ioBroker",
-            "template",
-            "Smart Home",
+            "hapcan",
+            "smart home",
             "home automation"
         ],
         "license": "MIT",
