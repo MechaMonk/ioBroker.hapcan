@@ -1,6 +1,8 @@
 
 iobrokerHapcanDir=/opt/iobroker/node_modules/iobroker.hapcan
 
+iobroker stop hapcan
+
 cp io-package.json ${iobrokerHapcanDir}
 cp package.json ${iobrokerHapcanDir}
 cp package-lock.json ${iobrokerHapcanDir}
@@ -22,7 +24,7 @@ cd ${iobrokerHapcanDir}
 iobroker upload hapcan
 cd -
 
-iobroker restart hapcan
+iobroker start hapcan
 
 #npm run test:package
 #npm run test:unit

@@ -1,11 +1,15 @@
 {
     "common": {
         "name": "hapcan",
-        "version": "0.9.1",
+        "version": "0.9.2",
         "news": {
             "0.9.1": {
                 "en": "Initial release",
                 "pl": "Pierwsze wydanie"
+            },
+            "0.9.2": {
+                "en": "Bugfix: wrong checksum",
+                "pl": "Bugfix: wrong checksum"
             }
         },
         "title": "HAPCAN",
