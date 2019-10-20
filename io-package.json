@@ -14,8 +14,8 @@
             "pl": "HAPCAN"
         },
         "desc": {
-            "en": "hapcan",
-            "pl": "hapcan"
+            "en": "Control HAPCAN devices over Ethernet Interface",
+            "pl": "Obsługa urządzeń HAPCAN przy użyciu modułu Ethernet Interface"
         },
         "authors": [
             "mariusz-n <mn.git@earth.net.pl>"

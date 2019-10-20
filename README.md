@@ -7,7 +7,7 @@
 [![Dependency Status](https://img.shields.io/david/mariusz-n/iobroker.hapcan.svg)](https://david-dm.org/mariusz-n/iobroker.hapcan)
 [![Known Vulnerabilities](https://snyk.io/test/github/mariusz-n/ioBroker.hapcan/badge.svg)](https://snyk.io/test/github/mariusz-n/ioBroker.hapcan)
 
-[![NPM](https://nodei.co/npm/iobroker.hapcan_logo.png?downloads=true)](https://nodei.co/npm/iobroker.hapcan/)
+[![NPM](https://nodei.co/npm/iobroker.hapcan.png?downloads=true)](https://nodei.co/npm/iobroker.hapcan/)
 
 **Tests:**: [![Travis-CI](http://img.shields.io/travis/mariusz-n/ioBroker.hapcan/master.svg)](https://travis-ci.org/mariusz-n/ioBroker.hapcan)
 
