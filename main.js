@@ -66,7 +66,7 @@ class Hapcan extends utils.Adapter {
          **/
         const onStateChange = function (id, state) {
             if (state) {
-                // _this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+                // _this.log.info(`[Main] state ${id} changed: ${state.val} (ack = ${state.ack})`);
                 // The state was changed
                 if (state.ack) {
                     // No need to implement ACK == true. Reader handles all frames from hardware.

@@ -1,6 +1,6 @@
 {
   "name": "iobroker.hapcan",
-  "version": "0.9.2",
+  "version": "0.9.4",
   "description": "HAPCAN ioBroker adapter",
   "author": {
     "name": "mariusz-n",

@@ -1,7 +1,7 @@
 {
     "common": {
         "name": "hapcan",
-        "version": "0.9.2",
+        "version": "0.9.4",
         "news": {
             "0.9.1": {
                 "en": "Initial release",
@@ -10,6 +10,10 @@
             "0.9.2": {
                 "en": "Bugfix: wrong checksum",
                 "pl": "Bugfix: wrong checksum"
+            },
+            "0.9.4": {
+                "en": "RGB LED Controller added",
+                "pl": "Dodano obsługę modułu RGB LED Controller"
             }
         },
         "title": "HAPCAN",
