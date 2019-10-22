@@ -1,6 +1,8 @@
 <img src="admin/hapcan_landscape.png" width="200" height="100"/>
 
-# ioBroker.hapcan
+# [ioBroker](https://www.iobroker.net/) [HAPCAN](https://hapcan.com/) Adapter
+
+This adapter communicates with [HAPCAN](https://hapcan.com/) Ethernet Interface and controls all devices connected to [HAPCAN](https://hapcan.com/) bus.
 
 [![NPM version](http://img.shields.io/npm/v/iobroker.hapcan.svg)](https://www.npmjs.com/package/iobroker.hapcan)
 [![Downloads](https://img.shields.io/npm/dm/iobroker.hapcan.svg)](https://www.npmjs.com/package/iobroker.hapcan)
@@ -11,31 +13,26 @@
 
 **Tests:**: [![Travis-CI](http://img.shields.io/travis/mariusz-n/ioBroker.hapcan/master.svg)](https://travis-ci.org/mariusz-n/ioBroker.hapcan)
 
-## HAPCAN adapter for ioBroker
+## Hardware
+
+Hardware supported:
+
+* [Ethernet Interface](https://hapcan.com/devices/universal/univ_3/univ_3-102-0-x/index.htm)
+* [Buttons](https://hapcan.com/devices/universal/univ_3/univ_3-1-x-x.htm)
+* [Relays](https://hapcan.com/devices/universal/univ_3/univ_3-2-x-x.htm)
+* [Thermometer and Thermostat](https://hapcan.com/devices/universal/univ_3/univ_3-4-x-x.htm)
+* [RBG LED Controller](https://hapcan.com/devices/universal/univ_3/univ_3-8-0-x/index.htm)
+* [Open Collector Outputs](https://hapcan.com/devices/universal/univ_3/univ_3-9-0-x/index.htm)
+
+<!-- TODO: -->
+<!-- - [Infrared Receiver & Transmitter](https://hapcan.com/devices/universal/univ_3/univ_3-5-0-x/index.htm) -->
+<!-- - [Dimmer RC](https://hapcan.com/devices/universal/univ_3/univ_3-6-0-x/index.htm) -->
+<!-- - [Blind Controller for AC Motors](https://hapcan.com/devices/universal/univ_3/univ_3-7-0-x/index.htm) -->
+<!-- - [RS-232C Interface](https://hapcan.com/devices/universal/univ_3/univ_3-101-0-x/index.htm) -->
 
 ## Changelog
 
 ## License
 
-MIT License
-
-Copyright (c) 2019 mariusz-n <mn.git@earth.net.pl>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
 
