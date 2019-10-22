@@ -1,7 +1,7 @@
 {
     "common": {
         "name": "hapcan",
-        "version": "0.9.6",
+        "version": "0.9.7",
         "news": {
             "0.9.1": {
                 "en": "Initial release",
