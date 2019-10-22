@@ -1,7 +1,7 @@
 {
     "common": {
         "name": "hapcan",
-        "version": "0.9.5",
+        "version": "0.9.6",
         "news": {
             "0.9.1": {
                 "en": "Initial release",
@@ -14,6 +14,10 @@
             "0.9.5": {
                 "en": "RGB LED Controller added",
                 "pl": "Dodano obsługę modułu RGB LED Controller"
+            },
+            "0.9.6": {
+                "en": "Open Collector added",
+                "pl": "Dodano obsługę modułu Open Collector"
             }
         },
         "title": "HAPCAN",
